@@ -1,3 +1,4 @@
+// BinaryNode.hpp
 #pragma once
 
 #include "../ASTNode.hpp"
@@ -24,7 +25,11 @@ public:
     BinaryNode(std::string op, 
                ASTNodePtr left, 
                ASTNodePtr right,
-               SourceLocation loc = {});
+               SourceLocation loc = {})
+        : ASTNode(NodeType::BinaryNode, std::move(loc)),
+          op_(std::move(op)),
+          left_(std::move(left)),
+          right_(std::move(right)) {}
 
     /**
      * @brief Get the operator
@@ -44,9 +49,17 @@ public:
      */
     ASTNode* getRight() const { return right_.get(); }
 
-    // ASTNode interface implementation
-    void accept(ASTVisitor& visitor) override;
-    std::string toString() const override;
+    void accept(ASTVisitor& visitor) override {} 
+
+    /**
+     * @brief Convert node to string representation
+     * @return std::string String representation of the node
+     */
+    std::string toString() const override {
+        return "BinaryNode(op: " + op_ + 
+               ", left: " + left_->toString() + 
+               ", right: " + right_->toString() + ")";
+    }
 
 private:
     std::string op_;

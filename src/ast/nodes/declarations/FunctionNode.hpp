@@ -1,7 +1,7 @@
+// FunctionNode.hpp
 #pragma once
 
 #include "../ASTNode.hpp"
-#include "../statements/BlockNode.hpp"
 #include <vector>
 #include <string>
 #include <utility>
@@ -22,7 +22,7 @@ public:
     FunctionNode(std::string name,
                std::string returnType,
                ParamList params,
-               std::unique_ptr<BlockNode> body,
+               ASTNodePtr body,  // Alterado para ASTNodePtr
                SourceLocation loc = {})
         : ASTNode(NodeType::FunctionNode, loc),
           name_(std::move(name)),
@@ -36,8 +36,8 @@ public:
     const std::string& getName() const { return name_; }
     const std::string& getReturnType() const { return returnType_; }
     const ParamList& getParams() const { return params_; }
-    const BlockNode* getBody() const { return body_.get(); }
-    BlockNode* getBody() { return body_.get(); }
+    const ASTNode* getBody() const { return body_.get(); }  // Alterado para ASTNode
+    ASTNode* getBody() { return body_.get(); }             // Alterado para ASTNode
     void accept(ASTVisitor& visitor) override {} 
 
     std::string toString() const override {
@@ -53,7 +53,7 @@ private:
     std::string name_;
     std::string returnType_;
     ParamList params_;
-    std::unique_ptr<BlockNode> body_;
+    ASTNodePtr body_;  // Alterado para ASTNodePtr
 };
 
 } // namespace ambar

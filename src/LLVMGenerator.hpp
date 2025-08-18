@@ -6,6 +6,7 @@
 #include "ast/nodes/declarations/VarNode.hpp"
 #include "ast/nodes/declarations/FunctionNode.hpp"
 #include "ast/nodes/expressions/NumberNode.hpp"
+#include "ast/nodes/expressions/BinaryNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -35,7 +36,9 @@ private:
     void generateFunction(FunctionNode* node);
     void generateVariable(VarNode* node);
     void generateMainFunction(std::unique_ptr<ASTNode>& astRoot);
+    llvm::Value* generateBinaryExpr(BinaryNode* node);
     llvm::Value* generateNumber(NumberNode* node);
+    llvm::Value* generateExpr(ASTNode* node);
     llvm::Type* getLLVMType(const std::string& typeName);
 };
 

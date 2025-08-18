@@ -70,12 +70,15 @@ void LLVMGenerator::generateVariable(VarNode* node) {
     namedValues[node->getName()] = alloca;
     
     if (node->getInit()) {
-        if (auto num = dynamic_cast<NumberNode*>(node->getInit().get())) {
-            Value* initVal;
-            if (node->getType() == "float") {
-                initVal = ConstantFP::get(*context, APFloat((float)num->getFloatValue()));
-            } else if (node->getType() == "int") {
-                initVal = ConstantInt::get(*context, APInt(32, (int)num->getIntValue()));
+        Value* initVal = generateExpr(node->getInit().get());
+        if (initVal) {
+            // Conversão de tipo se necessário
+            if (initVal->getType() != type) {
+                if (type->isIntegerTy() && initVal->getType()->isFloatingPointTy()) {
+                    initVal = builder->CreateFPToSI(initVal, type, "convtmp");
+                } else if (type->isFloatingPointTy() && initVal->getType()->isIntegerTy()) {
+                    initVal = builder->CreateSIToFP(initVal, type, "convtmp");
+                }
             }
             builder->CreateStore(initVal, alloca);
         }
@@ -90,39 +93,96 @@ Value* LLVMGenerator::generateNumber(NumberNode* node) {
     }
 }
 
+Value* LLVMGenerator::generateExpr(ASTNode* node) {
+    if (auto num = dynamic_cast<NumberNode*>(node)) {
+        return generateNumber(num);
+    } else if (auto binary = dynamic_cast<BinaryNode*>(node)) {
+        return generateBinaryExpr(binary);
+    }
+    // Adicione outros tipos de expressões conforme necessário
+    return nullptr;
+}
+
+Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
+    Value* L = generateExpr(node->getLeft());
+    Value* R = generateExpr(node->getRight());
+    
+    if (!L || !R) return nullptr;
+
+    Type* type = L->getType();
+    const std::string& op = node->getOp();
+    
+    // Verificação de tipo
+    if (L->getType() != R->getType()) {
+        llvm::errs() << "Erro: Tipos incompatíveis na operação binária\n";
+        return nullptr;
+    }
+
+    if (op == "+") {
+        return type->isFloatTy() ? builder->CreateFAdd(L, R, "addtmp") 
+                                : builder->CreateAdd(L, R, "addtmp");
+    }
+    
+    // Operações aritméticas
+    if (op == "+") {
+        return type->isFloatTy() ? builder->CreateFAdd(L, R, "addtmp") 
+                                 : builder->CreateAdd(L, R, "addtmp");
+    } else if (op == "-") {
+        return type->isFloatTy() ? builder->CreateFSub(L, R, "subtmp") 
+                                 : builder->CreateSub(L, R, "subtmp");
+    } else if (op == "*") {
+        return type->isFloatTy() ? builder->CreateFMul(L, R, "multmp") 
+                                 : builder->CreateMul(L, R, "multmp");
+    } else if (op == "/") {
+        return type->isFloatTy() ? builder->CreateFDiv(L, R, "divtmp") 
+                                 : builder->CreateSDiv(L, R, "divtmp");
+    }
+    // Operações de comparação
+    else if (op == "<") {
+        return builder->CreateFCmpULT(L, R, "cmptmp");
+    } else if (op == ">") {
+        return builder->CreateFCmpUGT(L, R, "cmptmp");
+    } else if (op == "<=") {
+        return builder->CreateFCmpULE(L, R, "cmptmp");
+    } else if (op == ">=") {
+        return builder->CreateFCmpUGE(L, R, "cmptmp");
+    } else if (op == "==") {
+        return builder->CreateFCmpUEQ(L, R, "cmptmp");
+    } else if (op == "!=") {
+        return builder->CreateFCmpUNE(L, R, "cmptmp");
+    }
+    // Operações lógicas
+    else if (op == "&&") {
+        return builder->CreateAnd(L, R, "andtmp");
+    } else if (op == "||") {
+        return builder->CreateOr(L, R, "ortmp");
+    }
+
+    llvm::errs() << "Operador binário desconhecido: " << op << "\n";
+    return nullptr;
+}
 void LLVMGenerator::generateFunction(FunctionNode* node) {
-    // Verifica se a função já foi declarada
     if (module->getFunction(node->getName())) {
         return;
     }
 
-    // Coletar tipos dos parâmetros
+    // Limpa a tabela de símbolos para a nova função
+    namedValues.clear();
+
     std::vector<Type*> paramTypes;
     for (const auto& param : node->getParams()) {
         paramTypes.push_back(getLLVMType(param.first));
     }
     
-    // Criar tipo da função
     Type* returnType = getLLVMType(node->getReturnType());
-    FunctionType* funcType = FunctionType::get(
-        returnType,
-        paramTypes,
-        false
-    );
+    FunctionType* funcType = FunctionType::get(returnType, paramTypes, false);
     
-    // Criar a função
-    Function* func = Function::Create(
-        funcType,
-        Function::ExternalLinkage,
-        node->getName(),
-        *module
-    );
+    Function* func = Function::Create(funcType, Function::ExternalLinkage, node->getName(), *module);
     
-    // Criar bloco básico
     BasicBlock* bb = BasicBlock::Create(*context, "entry", func);
     builder->SetInsertPoint(bb);
     
-    // Registrar parâmetros na tabela de símbolos
+    // Registrar parâmetros
     unsigned idx = 0;
     for (auto& arg : func->args()) {
         const auto& paramName = node->getParams()[idx].second;
@@ -139,33 +199,39 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     
     // Gerar o corpo da função (se existir)
     if (node->getBody()) {
-        // TODO: Implementar geração do corpo da função
-        // Por enquanto, apenas adicionamos um retorno padrão
-    }
-    
-    // Garantir que todas as funções não-void tenham um retorno
-    if (!returnType->isVoidTy()) {
-        Value* retVal = nullptr;
-        if (returnType->isFloatTy()) {
-            retVal = ConstantFP::get(*context, APFloat(0.0f));
-        } else if (returnType->isIntegerTy(32)) {
-            retVal = ConstantInt::get(*context, APInt(32, 0));
-        } else if (returnType->isIntegerTy(1)) {
-            retVal = ConstantInt::get(*context, APInt(1, 0));
-        }
+        Value* bodyValue = generateExpr(node->getBody());
         
-        if (retVal) {
-            builder->CreateRet(retVal);
-        } else {
-            builder->CreateUnreachable();
+        // Adicionar retorno apenas se o corpo não tiver terminador
+        if (bodyValue && !returnType->isVoidTy()) {
+            builder->CreateRet(bodyValue);
         }
-    } else {
-        builder->CreateRetVoid();
+        else if (returnType->isVoidTy()) {
+            builder->CreateRetVoid();
+        }
+    }
+    else {
+        // Apenas adicionar retorno padrão se não houver corpo
+        if (!returnType->isVoidTy()) {
+            Value* retVal = nullptr;
+            if (returnType->isFloatTy()) {
+                retVal = ConstantFP::get(*context, APFloat(0.0f));
+            } else if (returnType->isIntegerTy(32)) {
+                retVal = ConstantInt::get(*context, APInt(32, 0));
+            } else if (returnType->isIntegerTy(1)) {
+                retVal = ConstantInt::get(*context, APInt(1, 0));
+            }
+            
+            if (retVal) {
+                builder->CreateRet(retVal);
+            } else {
+                builder->CreateUnreachable();
+            }
+        } else {
+            builder->CreateRetVoid();
+        }
     }
     
-    // Verificação final da função
     if (verifyFunction(*func, &llvm::errs())) {
-        // Se houver erro, remove a função mal formada
         func->eraseFromParent();
         llvm::errs() << "Erro: Função '" << node->getName() << "' não pôde ser verificada\n";
     }

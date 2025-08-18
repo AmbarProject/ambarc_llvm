@@ -3,6 +3,7 @@
 #include "ast/nodes/declarations/VarNode.hpp"
 #include "ast/nodes/declarations/FunctionNode.hpp"
 #include "ast/nodes/expressions/NumberNode.hpp"
+#include "ast/nodes/expressions/BinaryNode.hpp"
 #include <memory>
 
 using namespace ambar;
@@ -20,40 +21,36 @@ int main() {
         SourceLocation());
     programPtr->addDeclaration(std::move(intVar));
     
-    auto floatVar = std::make_unique<VarNode>(
-        "pi",
-        "float",
-        std::make_unique<NumberNode>(3.14f),
+    // 2. Adiciona uma expressão binária como inicializador
+    auto leftExpr = std::make_unique<NumberNode>(10);
+    auto rightExpr = std::make_unique<NumberNode>(20);
+    auto binaryExpr = std::make_unique<BinaryNode>(
+        "+",
+        std::move(leftExpr),
+        std::move(rightExpr),
         SourceLocation());
-    programPtr->addDeclaration(std::move(floatVar));
     
-    // 2. Adiciona função com parâmetros (exemplo anterior)
-    FunctionNode::ParamList params = {{"int", "a"}, {"float", "b"}};
-    auto funcWithParams = std::make_unique<FunctionNode>(
-        "funcao_com_parametros",
-        "float",
-        std::move(params),
-        nullptr,
-        SourceLocation());
-    programPtr->addDeclaration(std::move(funcWithParams));
-    
-    // 3. Adiciona função SEM parâmetros (novo teste)
-    auto funcNoParams = std::make_unique<FunctionNode>(
-        "funcao_sem_parametros",
+    auto varWithBinary = std::make_unique<VarNode>(
+        "sum",
         "int",
-        FunctionNode::ParamList(),  // Lista vazia de parâmetros
-        nullptr,
+        std::move(binaryExpr),
         SourceLocation());
-    programPtr->addDeclaration(std::move(funcNoParams));
+    programPtr->addDeclaration(std::move(varWithBinary));
     
-    // 4. Adiciona função void sem parâmetros
-    auto voidFunc = std::make_unique<FunctionNode>(
-        "funcao_void",
-        "void",
-        FunctionNode::ParamList(),
-        nullptr,
+    // 3. Adiciona uma função com expressão binária no retorno
+    auto funcBody = std::make_unique<BinaryNode>(
+        "*",
+        std::make_unique<NumberNode>(5),
+        std::make_unique<NumberNode>(6),
         SourceLocation());
-    programPtr->addDeclaration(std::move(voidFunc));
+    
+    auto funcWithBinary = std::make_unique<FunctionNode>(
+        "calculate",
+        "int",
+        FunctionNode::ParamList(),
+        std::move(funcBody),  // Agora isso é válido
+        SourceLocation());
+    programPtr->addDeclaration(std::move(funcWithBinary));
     
     // Gera o código
     LLVMGenerator generator;
