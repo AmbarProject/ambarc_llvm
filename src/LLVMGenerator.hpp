@@ -9,6 +9,7 @@
 #include "ast/nodes/expressions/BinaryNode.hpp"
 #include "ast/nodes/expressions/BoolNode.hpp"
 #include "ast/nodes/expressions/IdentifierNode.hpp"
+#include "ast/nodes/expressions/StringNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -16,6 +17,7 @@
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/Constants.h>
 
 #include <map>
 #include <memory>
@@ -34,13 +36,14 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
-    llvm::Function* currentFunction = nullptr;  // Função sendo processada atualmente
+    llvm::Function* currentFunction = nullptr;
 
     // Tabelas de símbolos
-    std::unordered_map<std::string, llvm::Value*> namedValues;       // Variáveis locais
-    std::unordered_map<std::string, llvm::Type*> variableTypes;      // Tipos das variáveis locais
-    std::unordered_map<std::string, llvm::GlobalVariable*> globalValues; // Variáveis globais
-    std::unordered_map<std::string, llvm::Type*> globalTypes;        // Tipos das variáveis globais
+    std::unordered_map<std::string, llvm::Value*> namedValues;
+    std::unordered_map<std::string, llvm::Type*> variableTypes;
+    std::unordered_map<std::string, llvm::GlobalVariable*> globalValues;
+    std::unordered_map<std::string, llvm::Type*> globalTypes;
+    std::unordered_map<std::string, llvm::GlobalVariable*> stringLiterals;
 
     // Métodos de geração
     void generateProgram(ProgramNode* node);
@@ -59,10 +62,12 @@ private:
     llvm::Value* generateExpr(ASTNode* node);
     llvm::Value* generateBool(BoolNode* node);
     llvm::Value* generateIdentifier(IdentifierNode* node);
-    
+    llvm::Value* generateString(StringNode* node);
+
     // Utilitários
     llvm::Type* getLLVMType(const std::string& typeName);
     void handleGlobalVariables(ProgramNode* program);
+    llvm::GlobalVariable* createStringLiteral(const std::string& value);
 };
 
 } // namespace ambar

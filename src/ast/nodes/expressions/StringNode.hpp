@@ -11,11 +11,24 @@ public:
     
     const std::string& getValue() const;
     
+    void accept(ASTVisitor& visitor) override {} 
+
     std::string toString() const override;
-    void accept(ASTVisitor& visitor) override;
 
 private:
     std::string value_;
 };
+
+// Implementação inline para remover a necessidade do .cpp
+inline StringNode::StringNode(const std::string& value)
+    : ASTNode(ASTNode::NodeType::StringNode), value_(value) {}
+
+inline const std::string& StringNode::getValue() const {
+    return value_;
+}
+
+inline std::string StringNode::toString() const {
+    return "StringNode(value: \"" + value_ + "\")";
+}
 
 } // namespace ambar
