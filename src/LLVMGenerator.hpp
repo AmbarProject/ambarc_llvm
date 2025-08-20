@@ -7,16 +7,20 @@
 #include "ast/nodes/declarations/FunctionNode.hpp"
 #include "ast/nodes/expressions/NumberNode.hpp"
 #include "ast/nodes/expressions/BinaryNode.hpp"
+#include "ast/nodes/expressions/BoolNode.hpp"
+#include "ast/nodes/expressions/IdentifierNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Type.h>
+#include <llvm/IR/GlobalVariable.h>
 
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace ambar {
 
@@ -30,16 +34,35 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
-    std::map<std::string, llvm::Value*> namedValues;
+    llvm::Function* currentFunction = nullptr;  // Função sendo processada atualmente
 
+    // Tabelas de símbolos
+    std::unordered_map<std::string, llvm::Value*> namedValues;       // Variáveis locais
+    std::unordered_map<std::string, llvm::Type*> variableTypes;      // Tipos das variáveis locais
+    std::unordered_map<std::string, llvm::GlobalVariable*> globalValues; // Variáveis globais
+    std::unordered_map<std::string, llvm::Type*> globalTypes;        // Tipos das variáveis globais
+
+    // Métodos de geração
     void generateProgram(ProgramNode* node);
     void generateFunction(FunctionNode* node);
-    void generateVariable(VarNode* node);
+    llvm::Value* generateVariable(VarNode* node);
+    llvm::Value* generateLocalVariable(VarNode* node);
+    llvm::Value* generateGlobalVariable(VarNode* node);
+    bool isGlobalContext() const { return currentFunction == nullptr; }
     void generateMainFunction(std::unique_ptr<ASTNode>& astRoot);
+    
+    llvm::Constant* evaluateConstantExpression(ASTNode* node);
+
+    // Métodos de geração de expressões
     llvm::Value* generateBinaryExpr(BinaryNode* node);
     llvm::Value* generateNumber(NumberNode* node);
     llvm::Value* generateExpr(ASTNode* node);
+    llvm::Value* generateBool(BoolNode* node);
+    llvm::Value* generateIdentifier(IdentifierNode* node);
+    
+    // Utilitários
     llvm::Type* getLLVMType(const std::string& typeName);
+    void handleGlobalVariables(ProgramNode* program);
 };
 
 } // namespace ambar

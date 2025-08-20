@@ -1,3 +1,4 @@
+// BoolNode.hpp
 #pragma once
 
 #include "../ASTNode.hpp"
@@ -13,25 +14,24 @@ public:
      * @brief Construct a new BoolNode object
      * @param value The boolean value (true or false)
      */
-    explicit BoolNode(bool value);
+    explicit BoolNode(bool value) 
+        : ASTNode(ASTNode::NodeType::BoolNode), value_(value) {}
 
     /**
      * @brief Get the boolean value
      * @return bool The stored boolean value
      */
-    bool getValue() const;
+    bool getValue() const { return value_; }
 
-    /**
-     * @brief Accept a visitor (Visitor pattern)
-     * @param visitor The visitor to accept
-     */
-    void accept(ASTVisitor& visitor) override;
+    void accept(ASTVisitor& visitor) override {} 
 
     /**
      * @brief Convert the node to a string representation
      * @return std::string String representation of the node
      */
-    std::string toString() const override;
+    std::string toString() const override {
+        return "BoolNode(value: " + std::string(value_ ? "true" : "false") + ")";
+    }
 
 private:
     bool value_;

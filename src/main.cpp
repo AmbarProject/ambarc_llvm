@@ -4,55 +4,147 @@
 #include "ast/nodes/declarations/FunctionNode.hpp"
 #include "ast/nodes/expressions/NumberNode.hpp"
 #include "ast/nodes/expressions/BinaryNode.hpp"
+#include "ast/nodes/expressions/BoolNode.hpp"
+#include "ast/nodes/expressions/IdentifierNode.hpp"
 #include <memory>
+#include <utility>
+#include <vector>
 
 using namespace ambar;
 
 int main() {
-    // Cria o programa como unique_ptr<ASTNode>
     std::unique_ptr<ASTNode> program = std::make_unique<ProgramNode>();
     auto* programPtr = static_cast<ProgramNode*>(program.get());
     
-    // 1. Adiciona declarações de variáveis
+    // 1. Variáveis GLOBAIS
     auto intVar = std::make_unique<VarNode>(
-        "x", 
+        "counter", 
         "int", 
-        std::make_unique<NumberNode>(42), 
+        std::make_unique<NumberNode>(100), 
         SourceLocation());
     programPtr->addDeclaration(std::move(intVar));
     
-    // 2. Adiciona uma expressão binária como inicializador
-    auto leftExpr = std::make_unique<NumberNode>(10);
-    auto rightExpr = std::make_unique<NumberNode>(20);
-    auto binaryExpr = std::make_unique<BinaryNode>(
-        "+",
-        std::move(leftExpr),
-        std::move(rightExpr),
+    auto floatVar = std::make_unique<VarNode>(
+        "pi", 
+        "float", 
+        std::make_unique<NumberNode>(3.14159f), 
         SourceLocation());
+    programPtr->addDeclaration(std::move(floatVar));
     
-    auto varWithBinary = std::make_unique<VarNode>(
-        "sum",
-        "int",
-        std::move(binaryExpr),
+    auto boolVar = std::make_unique<VarNode>(
+        "is_active", 
+        "bool", 
+        std::make_unique<BoolNode>(true), 
         SourceLocation());
-    programPtr->addDeclaration(std::move(varWithBinary));
+    programPtr->addDeclaration(std::move(boolVar));
     
-    // 3. Adiciona uma função com expressão binária no retorno
-    auto funcBody = std::make_unique<BinaryNode>(
+    // 2. Expressão matemática com variáveis globais
+    auto complexMath = std::make_unique<BinaryNode>(
         "*",
-        std::make_unique<NumberNode>(5),
-        std::make_unique<NumberNode>(6),
-        SourceLocation());
+        std::make_unique<BinaryNode>(
+            "+",
+            std::make_unique<IdentifierNode>("counter"),
+            std::make_unique<NumberNode>(50),
+            SourceLocation()
+        ),
+        std::make_unique<BinaryNode>(
+            "-",
+            std::make_unique<NumberNode>(200),
+            std::make_unique<IdentifierNode>("counter"),
+            SourceLocation()
+        ),
+        SourceLocation()
+    );
     
-    auto funcWithBinary = std::make_unique<FunctionNode>(
-        "calculate",
+    auto mathVar = std::make_unique<VarNode>(
+        "math_result",
         "int",
-        FunctionNode::ParamList(),
-        std::move(funcBody),  // Agora isso é válido
+        std::move(complexMath),
         SourceLocation());
-    programPtr->addDeclaration(std::move(funcWithBinary));
+    programPtr->addDeclaration(std::move(mathVar));
     
-    // Gera o código
+    // 3. Expressão booleana com variáveis globais
+    auto complexBool = std::make_unique<BinaryNode>(
+        "&&",
+        std::make_unique<BinaryNode>(
+            ">",
+            std::make_unique<IdentifierNode>("counter"),
+            std::make_unique<NumberNode>(50),
+            SourceLocation()
+        ),
+        std::make_unique<BinaryNode>(
+            "==",
+            std::make_unique<IdentifierNode>("is_active"),
+            std::make_unique<BoolNode>(true),
+            SourceLocation()
+        ),
+        SourceLocation()
+    );
+    
+    auto boolResult = std::make_unique<VarNode>(
+        "should_process",
+        "bool",
+        std::move(complexBool),
+        SourceLocation());
+    programPtr->addDeclaration(std::move(boolResult));
+    
+    // 4. Função com múltiplos parâmetros
+    FunctionNode::ParamList multiParams;
+    multiParams.emplace_back("int", "a");
+    multiParams.emplace_back("int", "b");
+    multiParams.emplace_back("bool", "flag");
+    
+    auto multiParamFuncBody = std::make_unique<BinaryNode>(
+        "&&",
+        std::make_unique<BinaryNode>(
+            ">",
+            std::make_unique<BinaryNode>(
+                "*",
+                std::make_unique<IdentifierNode>("a"),
+                std::make_unique<IdentifierNode>("b"),
+                SourceLocation()
+            ),
+            std::make_unique<NumberNode>(0),
+            SourceLocation()
+        ),
+        std::make_unique<IdentifierNode>("flag"),
+        SourceLocation()
+    );
+    
+    auto multiParamFunc = std::make_unique<FunctionNode>(
+        "complexCheck",
+        "bool",
+        std::move(multiParams),
+        std::move(multiParamFuncBody),
+        SourceLocation());
+    programPtr->addDeclaration(std::move(multiParamFunc));
+    
+    // 5. Função que usa parâmetro (local implícito)
+    FunctionNode::ParamList validateParams;
+    validateParams.emplace_back("int", "value");
+    
+    // Corpo: return value + 10 > 50
+    auto validateBody = std::make_unique<BinaryNode>(
+        ">",
+        std::make_unique<BinaryNode>(
+            "+",
+            std::make_unique<IdentifierNode>("value"),
+            std::make_unique<NumberNode>(10),
+            SourceLocation()
+        ),
+        std::make_unique<NumberNode>(50),
+        SourceLocation()
+    );
+    
+    auto validateFunc = std::make_unique<FunctionNode>(
+        "validateCounter",
+        "bool",
+        std::move(validateParams),
+        std::move(validateBody),
+        SourceLocation());
+    programPtr->addDeclaration(std::move(validateFunc));
+    
+    // 6. Geração do código LLVM IR
     LLVMGenerator generator;
     generator.generate(program);
     generator.dumpIR();
