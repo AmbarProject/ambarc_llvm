@@ -23,16 +23,13 @@ public:
      */
     const std::string& getOp() const { return op_; }
 
+    void accept(ASTVisitor& visitor) override {} 
+
     /**
      * @brief Get the operand
      * @return ASTNode* The operand expression
      */
     ASTNode* getOperand() const { return operand_.get(); }
-
-
-    void accept(ASTVisitor& visitor) override {
-        visitor.visit(*this);
-    }
 
     std::string toString() const override {
         return "UnaryNode: " + op_;

@@ -265,6 +265,12 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
                 }
                 return ConstantInt::get(*context, lVal.sdiv(rVal));
             }
+            if (op == "==") return ConstantInt::get(*context, APInt(1, lVal == rVal));
+            if (op == "!=") return ConstantInt::get(*context, APInt(1, lVal != rVal));
+            if (op == "<") return ConstantInt::get(*context, APInt(1, lVal.slt(rVal)));
+            if (op == ">") return ConstantInt::get(*context, APInt(1, lVal.sgt(rVal)));
+            if (op == "<=") return ConstantInt::get(*context, APInt(1, lVal.sle(rVal)));
+            if (op == ">=") return ConstantInt::get(*context, APInt(1, lVal.sge(rVal)));
         }
         // Operações com ponteiros (assumindo strings)
         else if (L->getType()->isPointerTy() && R->getType()->isPointerTy()) {
@@ -298,6 +304,50 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
         }
         
         llvm::errs() << "Erro: Operação '" << op << "' não suportada em contexto constante\n";
+        return nullptr;
+    }
+    else if (auto unary = dynamic_cast<UnaryNode*>(node)) {
+        Constant* operand = evaluateConstantExpression(unary->getOperand());
+        if (!operand) return nullptr;
+
+        const std::string& op = unary->getOp();
+
+        if (op == "-") {
+            if (operand->getType()->isFloatTy()) {
+                APFloat floatVal = cast<ConstantFP>(operand)->getValueAPF();
+                floatVal.changeSign();
+                return ConstantFP::get(*context, floatVal);
+            } else if (operand->getType()->isIntegerTy(32)) {
+                APInt intVal = cast<ConstantInt>(operand)->getValue();
+                return ConstantInt::get(*context, -intVal);
+            } else {
+                llvm::errs() << "Erro: Operador '-' não suportado para este tipo em contexto constante\n";
+                return nullptr;
+            }
+        } 
+        else if (op == "!") {
+            if (operand->getType()->isIntegerTy(1)) {
+                APInt boolVal = cast<ConstantInt>(operand)->getValue();
+                return ConstantInt::get(*context, APInt(1, boolVal == 0 ? 1 : 0));
+            } else if (operand->getType()->isIntegerTy(32)) {
+                APInt intVal = cast<ConstantInt>(operand)->getValue();
+                return ConstantInt::get(*context, APInt(1, intVal == 0 ? 1 : 0));
+            } else {
+                llvm::errs() << "Erro: Operador '!' não suportado para este tipo em contexto constante\n";
+                return nullptr;
+            }
+        } 
+        else if (op == "~") {
+            if (operand->getType()->isIntegerTy(32)) {
+                APInt intVal = cast<ConstantInt>(operand)->getValue();
+                return ConstantInt::get(*context, ~intVal);
+            } else {
+                llvm::errs() << "Erro: Operador '~' não suportado para este tipo em contexto constante\n";
+                return nullptr;
+            }
+        }
+
+        llvm::errs() << "Erro: Operador unário '" << op << "' não suportado em contexto constante\n";
         return nullptr;
     }
     
@@ -413,9 +463,56 @@ Value* LLVMGenerator::generateExpr(ASTNode* node) {
         return generateVariable(var);
     } else if (auto strNode = dynamic_cast<StringNode*>(node)) {
         return generateString(strNode);
+    } else if (auto unary = dynamic_cast<UnaryNode*>(node)) {
+        return generateUnaryExpr(unary);
     }
+
     return nullptr;
 }
+
+Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
+    Value* operand = generateExpr(node->getOperand());
+    if (!operand) return nullptr;
+
+    const std::string& op = node->getOp();
+    Type* type = operand->getType();
+
+    if (op == "-") {
+        if (type->isFloatTy()) {
+            return builder->CreateFNeg(operand, "negtmp");
+        } else if (type->isIntegerTy(32)) {
+            return builder->CreateNeg(operand, "negtmp");
+        } else {
+            llvm::errs() << "Erro: Operador '-' não suportado para este tipo\n";
+            return nullptr;
+        }
+    } else if (op == "!") {
+        if (type->isIntegerTy(1)) {
+            return builder->CreateNot(operand, "nottmp");
+        } else if (type->isIntegerTy(32)) {
+            // Converta para booleano primeiro
+            Value* boolVal = builder->CreateICmpNE(
+                operand, 
+                ConstantInt::get(*context, APInt(32, 0)), 
+                "booltmp");
+            return builder->CreateNot(boolVal, "nottmp");
+        } else {
+            llvm::errs() << "Erro: Operador '!' não suportado para este tipo\n";
+            return nullptr;
+        }
+    } else if (op == "~") {
+        if (type->isIntegerTy(32)) {
+            return builder->CreateNot(operand, "bwnottmp");
+        } else {
+            llvm::errs() << "Erro: Operador '~' não suportado para este tipo\n";
+            return nullptr;
+        }
+    }
+
+    llvm::errs() << "Operador unário desconhecido: " << op << "\n";
+    return nullptr;
+}
+
 
 Value* LLVMGenerator::generateBool(BoolNode* node) {
     return ConstantInt::get(*context, APInt(1, node->getValue() ? 1 : 0));

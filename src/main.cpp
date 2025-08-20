@@ -6,7 +6,8 @@
 #include "ast/nodes/expressions/BinaryNode.hpp"
 #include "ast/nodes/expressions/BoolNode.hpp"
 #include "ast/nodes/expressions/IdentifierNode.hpp"
-#include "ast/nodes/expressions/StringNode.hpp" // <-- Adicionar esta linha
+#include "ast/nodes/expressions/StringNode.hpp"
+#include "ast/nodes/expressions/UnaryNode.hpp"
 #include <memory>
 #include <utility>
 #include <vector>
@@ -17,7 +18,7 @@ int main() {
     std::unique_ptr<ASTNode> program = std::make_unique<ProgramNode>();
     auto* programPtr = static_cast<ProgramNode*>(program.get());
     
-    // 1. Variáveis GLOBAIS (incluindo string)
+    // 1. Variáveis GLOBAIS
     auto intVar = std::make_unique<VarNode>(
         "counter", 
         "int", 
@@ -25,58 +26,68 @@ int main() {
         SourceLocation());
     programPtr->addDeclaration(std::move(intVar));
     
-    auto stringVar = std::make_unique<VarNode>( // <-- Adicionar variável string
-        "message", 
-        "string", 
-        std::make_unique<StringNode>("Hello, World!"), 
-        SourceLocation());
-    programPtr->addDeclaration(std::move(stringVar));
-    
-    auto floatVar = std::make_unique<VarNode>(
-        "pi", 
-        "float", 
-        std::make_unique<NumberNode>(3.14159f), 
-        SourceLocation());
-    programPtr->addDeclaration(std::move(floatVar));
-    
-    auto boolVar = std::make_unique<VarNode>(
-        "is_active", 
-        "bool", 
-        std::make_unique<BoolNode>(true), 
-        SourceLocation());
-    programPtr->addDeclaration(std::move(boolVar));
-    
-    // 2. Concatenação de strings (exemplo simples)
-    auto stringConcat = std::make_unique<BinaryNode>(
-        "+",
-        std::make_unique<StringNode>("Prefix: "),
-        std::make_unique<IdentifierNode>("message"),
+    // 2. Teste de operadores unários
+    auto negateTest = std::make_unique<UnaryNode>(
+        "-",
+        std::make_unique<NumberNode>(42),
         SourceLocation()
     );
     
-    auto concatVar = std::make_unique<VarNode>(
-        "concatenated",
-        "string",
-        std::move(stringConcat),
+    auto negateVar = std::make_unique<VarNode>(
+        "negative_value",
+        "int",
+        std::move(negateTest),
         SourceLocation());
-    programPtr->addDeclaration(std::move(concatVar));
+    programPtr->addDeclaration(std::move(negateVar));
     
-    // 3. Função que retorna string
-    FunctionNode::ParamList stringParams;
-    stringParams.emplace_back("int", "value");
+    // 3. Teste de negação lógica
+    auto notTest = std::make_unique<UnaryNode>(
+        "!",
+        std::make_unique<BoolNode>(true),
+        SourceLocation()
+    );
     
-    auto stringFuncBody = std::make_unique<StringNode>("Result: ");
-    // Nota: Em uma implementação real, você precisaria de operações de concatenação
-    
-    auto stringFunc = std::make_unique<FunctionNode>(
-        "getResultMessage",
-        "string",
-        std::move(stringParams),
-        std::move(stringFuncBody),
+    auto notVar = std::make_unique<VarNode>(
+        "not_result",
+        "bool",
+        std::move(notTest),
         SourceLocation());
-    programPtr->addDeclaration(std::move(stringFunc));
+    programPtr->addDeclaration(std::move(notVar));
     
-    // 4. Geração do código LLVM IR
+    // 4. Teste de complemento bit a bit
+    auto bitwiseNotTest = std::make_unique<UnaryNode>(
+        "~",
+        std::make_unique<NumberNode>(255),
+        SourceLocation()
+    );
+    
+    auto bitwiseNotVar = std::make_unique<VarNode>(
+        "bitwise_not_result",
+        "int",
+        std::move(bitwiseNotTest),
+        SourceLocation());
+    programPtr->addDeclaration(std::move(bitwiseNotVar));
+    
+    // 5. Teste de operador unário em expressão complexa
+    auto complexExpr = std::make_unique<BinaryNode>(
+        "+",
+        std::make_unique<UnaryNode>(
+            "-",
+            std::make_unique<NumberNode>(10),
+            SourceLocation()
+        ),
+        std::make_unique<NumberNode>(20),
+        SourceLocation()
+    );
+    
+    auto complexVar = std::make_unique<VarNode>(
+        "complex_result",
+        "int",
+        std::move(complexExpr),
+        SourceLocation());
+    programPtr->addDeclaration(std::move(complexVar));
+    
+    // 6. Geração do código LLVM IR
     LLVMGenerator generator;
     generator.generate(program);
     generator.dumpIR();

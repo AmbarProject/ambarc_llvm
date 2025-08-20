@@ -10,6 +10,7 @@
 #include "ast/nodes/expressions/BoolNode.hpp"
 #include "ast/nodes/expressions/IdentifierNode.hpp"
 #include "ast/nodes/expressions/StringNode.hpp"
+#include "ast/nodes/expressions/UnaryNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -58,6 +59,7 @@ private:
 
     // Métodos de geração de expressões
     llvm::Value* generateBinaryExpr(BinaryNode* node);
+    llvm::Value* generateUnaryExpr(UnaryNode* node);
     llvm::Value* generateNumber(NumberNode* node);
     llvm::Value* generateExpr(ASTNode* node);
     llvm::Value* generateBool(BoolNode* node);
