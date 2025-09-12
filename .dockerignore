@@ -1,0 +1,11 @@
+.git/
+.gitignore
+build/
+output/
+*.o
+*.a
+*.so
+*.log
+.DS_Store
+.vscode/
+.idea/

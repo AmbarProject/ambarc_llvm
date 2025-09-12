@@ -7,8 +7,8 @@ namespace ambar {
 
 class IdentifierNode : public ASTNode {
 public:
-    explicit IdentifierNode(const std::string& name)
-        : ASTNode(ASTNode::NodeType::IdentifierNode), name_(name) {}
+    explicit IdentifierNode(const std::string& name, SourceLocation loc = {})
+        : ASTNode(ASTNode::NodeType::IdentifierNode, loc), name_(name) {}
 
     const std::string& getName() const { return name_; }
 

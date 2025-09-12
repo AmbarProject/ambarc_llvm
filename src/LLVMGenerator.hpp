@@ -11,6 +11,7 @@
 #include "ast/nodes/expressions/IdentifierNode.hpp"
 #include "ast/nodes/expressions/StringNode.hpp"
 #include "ast/nodes/expressions/UnaryNode.hpp"
+#include "ast/nodes/statements/AssignNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -65,6 +66,7 @@ private:
     llvm::Value* generateBool(BoolNode* node);
     llvm::Value* generateIdentifier(IdentifierNode* node);
     llvm::Value* generateString(StringNode* node);
+    llvm::Value* generateAssign(AssignNode* node);
 
     // Utilitários
     llvm::Type* getLLVMType(const std::string& typeName);

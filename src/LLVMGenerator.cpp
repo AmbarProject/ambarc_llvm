@@ -71,12 +71,18 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     builder->SetInsertPoint(bb);
     
     if (auto programNode = dynamic_cast<ProgramNode*>(astRoot.get())) {
+        // Primeiro: processar apenas declarações de variáveis locais
         for (const auto& decl : programNode->getDeclarations()) {
             if (auto varNode = dynamic_cast<VarNode*>(decl.get())) {
-                // Se não for global, trata como local
-                if (!globalValues.count(varNode->getName())) {
-                    generateLocalVariable(varNode);
-                }
+                // Criar apenas variáveis locais (não globais)
+                generateLocalVariable(varNode);
+            }
+        }
+        
+        // Segundo: processar assignments
+        for (const auto& decl : programNode->getDeclarations()) {
+            if (auto assignNode = dynamic_cast<AssignNode*>(decl.get())) {
+                generateAssign(assignNode);
             }
         }
     }
@@ -465,6 +471,8 @@ Value* LLVMGenerator::generateExpr(ASTNode* node) {
         return generateString(strNode);
     } else if (auto unary = dynamic_cast<UnaryNode*>(node)) {
         return generateUnaryExpr(unary);
+    } else if (auto assign = dynamic_cast<AssignNode*>(node)) {
+        return generateAssign(assign);
     }
 
     return nullptr;
@@ -511,6 +519,56 @@ Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
 
     llvm::errs() << "Operador unário desconhecido: " << op << "\n";
     return nullptr;
+}
+
+Value* LLVMGenerator::generateAssign(AssignNode* node) {
+    const std::string& identifier = node->getIdentifier();
+    Value* target = nullptr;
+    Type* targetType = nullptr;
+
+    // Primeiro verificar se é variável local
+    if (namedValues.count(identifier)) {
+        target = namedValues[identifier];
+        targetType = variableTypes[identifier];
+    }
+    // Depois verificar se é variável global
+    else if (globalValues.count(identifier)) {
+        target = globalValues[identifier];
+        targetType = globalTypes[identifier];
+    }
+    else {
+        llvm::errs() << "Erro: Variável '" << identifier << "' não declarada\n";
+        return nullptr;
+    }
+
+    // Gerar valor da expressão
+    Value* value = generateExpr(node->getValueExpr());
+    if (!value) {
+        llvm::errs() << "Erro: Expressão de atribuição inválida\n";
+        return nullptr;
+    }
+
+    // Verificar compatibilidade de tipos e fazer conversões necessárias
+    if (value->getType() != targetType) {
+        if (targetType->isIntegerTy(32) && value->getType()->isIntegerTy(1)) {
+            value = builder->CreateZExt(value, targetType, "intconv");
+        } else if (targetType->isIntegerTy(1) && value->getType()->isIntegerTy(32)) {
+            value = builder->CreateICmpNE(value, ConstantInt::get(*context, APInt(32, 0)), "boolconv");
+        } else if (targetType->isFloatTy() && value->getType()->isIntegerTy(32)) {
+            value = builder->CreateSIToFP(value, targetType, "floatconv");
+        } else if (targetType->isIntegerTy(32) && value->getType()->isFloatTy()) {
+            value = builder->CreateFPToSI(value, targetType, "intconv");
+        } else {
+            llvm::errs() << "Erro: Tipos incompatíveis na atribuição para '" 
+                        << identifier << "'. Esperado: " << *targetType
+                        << ", obtido: " << *value->getType() << "\n";
+            return nullptr;
+        }
+    }
+
+    // Fazer o store
+    builder->CreateStore(value, target);
+    return value;
 }
 
 
