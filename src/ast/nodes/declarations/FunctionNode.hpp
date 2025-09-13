@@ -1,4 +1,3 @@
-// FunctionNode.hpp
 #pragma once
 
 #include "../ASTNode.hpp"
@@ -9,12 +8,6 @@
 
 namespace ambar {
 
-/**
- * @brief Node for function declarations in the AST
- * 
- * Represents a function declaration with its name, return type,
- * parameters, and body.
- */
 class FunctionNode : public ASTNode {
 public:
     using ParamList = std::vector<std::pair<std::string, std::string>>;
@@ -22,7 +15,7 @@ public:
     FunctionNode(std::string name,
                std::string returnType,
                ParamList params,
-               ASTNodePtr body,  // Alterado para ASTNodePtr
+               ASTNodePtr body = nullptr,
                SourceLocation loc = {})
         : ASTNode(NodeType::FunctionNode, loc),
           name_(std::move(name)),
@@ -36,9 +29,14 @@ public:
     const std::string& getName() const { return name_; }
     const std::string& getReturnType() const { return returnType_; }
     const ParamList& getParams() const { return params_; }
-    const ASTNode* getBody() const { return body_.get(); }  // Alterado para ASTNode
-    ASTNode* getBody() { return body_.get(); }             // Alterado para ASTNode
+    const ASTNode* getBody() const { return body_.get(); }
+    ASTNode* getBody() { return body_.get(); }
+    
+    // Setter para o corpo
+    void setBody(ASTNodePtr body) { body_ = std::move(body); }
+
     void accept(ASTVisitor& visitor) override {} 
+
 
     std::string toString() const override {
         std::string paramsStr;
@@ -53,7 +51,7 @@ private:
     std::string name_;
     std::string returnType_;
     ParamList params_;
-    ASTNodePtr body_;  // Alterado para ASTNodePtr
+    ASTNodePtr body_;
 };
 
 } // namespace ambar

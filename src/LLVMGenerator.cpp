@@ -39,17 +39,15 @@ void LLVMGenerator::generate(std::unique_ptr<ASTNode>& astRoot) {
         // Processa variáveis globais primeiro
         handleGlobalVariables(programNode);
         
-        // Gera a função main
-        generateMainFunction(astRoot);
-        
-        // Gera outras funções
+        // Gera TODAS as funções antes do main
         for (const auto& decl : programNode->getDeclarations()) {
             if (auto funcNode = dynamic_cast<FunctionNode*>(decl.get())) {
-                if (funcNode->getName() != "main") {
-                    generateFunction(funcNode);
-                }
+                generateFunction(funcNode);
             }
         }
+        
+        // Gera a função main por último
+        generateMainFunction(astRoot);
     }
 }
 
@@ -72,9 +70,11 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     
     if (auto programNode = dynamic_cast<ProgramNode*>(astRoot.get())) {
         for (const auto& decl : programNode->getDeclarations()) {
+            // Processa apenas BlockNodes (código do programa principal)
             if (auto blockNode = dynamic_cast<BlockNode*>(decl.get())) {
                 generateBlock(blockNode);
             }
+            // Ignora FunctionNodes (já foram processadas)
         }
     }
     
@@ -95,11 +95,21 @@ Value* LLVMGenerator::generateBlock(BlockNode* node) {
     
     // Processar statements
     Value* lastValue = nullptr;
+    BasicBlock* currentBB = builder->GetInsertBlock();
+    
     for (const auto& stmt : node->getStatements()) {
+        // Verificar se o bloco atual já tem um terminador
+        if (currentBB->getTerminator()) {
+            break; // Não processar mais statements se já temos um terminador
+        }
+        
         lastValue = generateExpr(stmt.get());
         if (!lastValue) {
             break;
         }
+        
+        // Atualizar referência do bloco atual
+        currentBB = builder->GetInsertBlock();
     }
     
     // Restaurar tabelas de símbolos (escopo local termina)
@@ -498,9 +508,200 @@ Value* LLVMGenerator::generateExpr(ASTNode* node) {
         return generateContinue(continueNode);
     } else if (auto forNode = dynamic_cast<ForNode*>(node)) {
         return generateFor(forNode);
+    } else if (auto ifNode = dynamic_cast<IfNode*>(node)) {
+        return generateIf(ifNode);
+    } else if (auto returnNode = dynamic_cast<ReturnNode*>(node)) {
+        return generateReturn(returnNode);
+    } else if (auto whileNode = dynamic_cast<WhileNode*>(node)) {
+        return generateWhile(whileNode);
+    } else if (auto call = dynamic_cast<CallNode*>(node)) {
+        return generateCall(call);
+    } else if (auto funcNode = dynamic_cast<FunctionNode*>(node)) {
+        generateFunction(funcNode);
+        return nullptr;
     }
 
     return nullptr;
+}
+
+Value* LLVMGenerator::generateReturn(ReturnNode* node) {
+    if (!currentFunction) {
+        llvm::errs() << "Erro: 'return' fora de uma função\n";
+        return nullptr;
+    }
+    
+    Type* returnType = currentFunction->getReturnType();
+    
+    if (node->getExpr()) {
+        // Return com expressão
+        Value* retValue = generateExpr(node->getExpr()); // CORRIGIDO: removido .get()
+        if (!retValue) {
+            llvm::errs() << "Erro: Expressão de return inválida\n";
+            return nullptr;
+        }
+        
+        // Verificar compatibilidade de tipos
+        if (retValue->getType() != returnType) {
+            // Conversões de tipo necessárias
+            if (returnType->isIntegerTy(32) && retValue->getType()->isIntegerTy(1)) {
+                retValue = builder->CreateZExt(retValue, returnType, "retconv");
+            } else if (returnType->isIntegerTy(1) && retValue->getType()->isIntegerTy(32)) {
+                retValue = builder->CreateICmpNE(retValue, ConstantInt::get(*context, APInt(32, 0)), "retconv");
+            } else if (returnType->isFloatTy() && retValue->getType()->isIntegerTy(32)) {
+                retValue = builder->CreateSIToFP(retValue, returnType, "retconv");
+            } else if (returnType->isIntegerTy(32) && retValue->getType()->isFloatTy()) {
+                retValue = builder->CreateFPToSI(retValue, returnType, "retconv");
+            } else {
+                llvm::errs() << "Erro: Tipo de retorno incompatível. Esperado: " 
+                            << *returnType << ", obtido: " << *retValue->getType() << "\n";
+                return nullptr;
+            }
+        }
+        
+        builder->CreateRet(retValue);
+        return retValue;
+    } else {
+        // Return void
+        if (!returnType->isVoidTy()) {
+            llvm::errs() << "Erro: Função não-void retornando sem valor\n";
+            return nullptr;
+        }
+        
+        builder->CreateRetVoid();
+        return nullptr;
+    }
+}
+
+Value* LLVMGenerator::generateWhile(WhileNode* node) {
+    // Salvar o estado atual das tabelas de símbolos para o escopo do loop
+    std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
+    std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
+    
+    Function* function = builder->GetInsertBlock()->getParent();
+    BasicBlock* currentBB = builder->GetInsertBlock();
+    
+    // Criar blocos básicos para o loop
+    BasicBlock* condBB = BasicBlock::Create(*context, "while.cond", function);
+    BasicBlock* bodyBB = BasicBlock::Create(*context, "while.body", function);
+    BasicBlock* afterBB = BasicBlock::Create(*context, "while.end", function);
+    
+    // Saltar para o bloco de condição
+    builder->CreateBr(condBB);
+    
+    // Bloco de condição
+    builder->SetInsertPoint(condBB);
+    
+    // Gerar a condição
+    Value* condValue = generateExpr(node->getCondition());
+    if (!condValue) {
+        llvm::errs() << "Erro: Condição do while inválida\n";
+        return nullptr;
+    }
+    
+    // Converter para booleano se necessário
+    if (!condValue->getType()->isIntegerTy(1)) {
+        condValue = builder->CreateICmpNE(
+            condValue, 
+            ConstantInt::get(condValue->getType(), 0), 
+            "whilecond");
+    }
+    
+    builder->CreateCondBr(condValue, bodyBB, afterBB);
+    
+    // Bloco do corpo
+    builder->SetInsertPoint(bodyBB);
+    
+    // Empilhar blocos de break/continue
+    pushLoopBlocks(afterBB, condBB);
+    
+    // Gerar o corpo do loop
+    if (node->getBody()) {
+        generateExpr(node->getBody());
+    }
+    
+    // Desempilhar blocos de break/continue
+    popLoopBlocks();
+    
+    // Saltar de volta para verificar a condição
+    builder->CreateBr(condBB);
+    
+    // Bloco após o loop
+    builder->SetInsertPoint(afterBB);
+    
+    // Restaurar tabelas de símbolos (escopo do loop termina)
+    namedValues = oldNamedValues;
+    variableTypes = oldVariableTypes;
+    
+    return ConstantInt::get(*context, APInt(32, 0)); // Retorno dummy
+}
+
+Value* LLVMGenerator::generateIf(IfNode* node) {
+    // Gerar a condição
+    Value* condValue = generateExpr(node->getCondition());
+    if (!condValue) {
+        llvm::errs() << "Erro: Condição do if inválida\n";
+        return nullptr;
+    }
+    
+    // Converter para booleano se necessário
+    if (!condValue->getType()->isIntegerTy(1)) {
+        condValue = builder->CreateICmpNE(
+            condValue, 
+            ConstantInt::get(condValue->getType(), 0), 
+            "ifcond");
+    }
+    
+    Function* function = builder->GetInsertBlock()->getParent();
+    BasicBlock* currentBB = builder->GetInsertBlock();
+    
+    // Criar blocos básicos
+    BasicBlock* thenBB = BasicBlock::Create(*context, "then", function);
+    BasicBlock* elseBB = node->getElseBlock() ? 
+                         BasicBlock::Create(*context, "else", function) : nullptr;
+    BasicBlock* mergeBB = BasicBlock::Create(*context, "ifcont", function);
+    
+    // Criar branch condicional
+    if (elseBB) {
+        builder->CreateCondBr(condValue, thenBB, elseBB);
+    } else {
+        builder->CreateCondBr(condValue, thenBB, mergeBB);
+    }
+    
+    // Gerar bloco then
+    builder->SetInsertPoint(thenBB);
+    Value* thenValue = generateExpr(node->getThenBlock());
+    thenBB = builder->GetInsertBlock();
+    
+    // Só criar branch para merge se o bloco then não terminou
+    if (!thenBB->getTerminator()) {
+        builder->CreateBr(mergeBB);
+    }
+    
+    // Gerar bloco else se existir
+    Value* elseValue = nullptr;
+    if (elseBB) {
+        builder->SetInsertPoint(elseBB);
+        elseValue = generateExpr(node->getElseBlock());
+        elseBB = builder->GetInsertBlock();
+        
+        // Só criar branch para merge se o bloco else não terminou
+        if (!elseBB->getTerminator()) {
+            builder->CreateBr(mergeBB);
+        }
+    }
+    
+    // Só continuar no bloco merge se ele for alcançável
+    bool mergeReachable = (!thenBB->getTerminator() || isa<BranchInst>(thenBB->getTerminator())) &&
+                          (!elseBB || !elseBB->getTerminator() || isa<BranchInst>(elseBB->getTerminator()));
+    
+    if (mergeReachable) {
+        builder->SetInsertPoint(mergeBB);
+        return thenValue ? thenValue : elseValue;
+    } else {
+        // Se o merge não é alcançável, remover e retornar null
+        mergeBB->eraseFromParent();
+        return nullptr;
+    }
 }
 
 Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
@@ -545,6 +746,8 @@ Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
     llvm::errs() << "Operador unário desconhecido: " << op << "\n";
     return nullptr;
 }
+
+
 
 Value* LLVMGenerator::generateBreak(BreakNode* node) {
     if (breakBlocks.empty()) {
@@ -742,6 +945,66 @@ Value* LLVMGenerator::generateString(StringNode* node) {
     );
 }
 
+Value* LLVMGenerator::generateCall(CallNode* node) {
+    const std::string& funcName = node->getFunctionName();
+    
+    // Verificar se a função existe
+    Function* callee = module->getFunction(funcName);
+    if (!callee) {
+        llvm::errs() << "Erro: Função '" << funcName << "' não declarada\n";
+        return nullptr;
+    }
+    
+    // Verificar número de argumentos
+    if (callee->arg_size() != node->getArguments().size()) {
+        llvm::errs() << "Erro: Número de argumentos incorreto para função '" 
+                    << funcName << "'. Esperado: " << callee->arg_size()
+                    << ", obtido: " << node->getArguments().size() << "\n";
+        return nullptr;
+    }
+    
+    // Gerar valores dos argumentos
+    std::vector<Value*> args;
+    unsigned idx = 0;
+    for (const auto& argExpr : node->getArguments()) {
+        Value* argValue = generateExpr(argExpr.get());
+        if (!argValue) {
+            llvm::errs() << "Erro: Argumento " << idx << " inválido para função '" 
+                        << funcName << "'\n";
+            return nullptr;
+        }
+        
+        // Verificar compatibilidade de tipos e fazer conversões
+        Type* expectedType = callee->getArg(idx)->getType();
+        if (argValue->getType() != expectedType) {
+            if (expectedType->isIntegerTy(32) && argValue->getType()->isIntegerTy(1)) {
+                argValue = builder->CreateZExt(argValue, expectedType, "argconv");
+            } else if (expectedType->isIntegerTy(1) && argValue->getType()->isIntegerTy(32)) {
+                argValue = builder->CreateICmpNE(argValue, ConstantInt::get(*context, APInt(32, 0)), "argconv");
+            } else if (expectedType->isFloatTy() && argValue->getType()->isIntegerTy(32)) {
+                argValue = builder->CreateSIToFP(argValue, expectedType, "argconv");
+            } else if (expectedType->isIntegerTy(32) && argValue->getType()->isFloatTy()) {
+                argValue = builder->CreateFPToSI(argValue, expectedType, "argconv");
+            } else {
+                llvm::errs() << "Erro: Tipo de argumento " << idx << " incompatível para função '" 
+                            << funcName << "'. Esperado: " << *expectedType
+                            << ", obtido: " << *argValue->getType() << "\n";
+                return nullptr;
+            }
+        }
+        
+        args.push_back(argValue);
+        idx++;
+    }
+    
+    // Criar a chamada
+    if (callee->getReturnType()->isVoidTy()) {
+        return builder->CreateCall(callee, args);
+    } else {
+        return builder->CreateCall(callee, args, "calltmp");
+    }
+}
+
 Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
     Value* L = generateExpr(node->getLeft());
     Value* R = generateExpr(node->getRight());
@@ -858,7 +1121,6 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
         Type* paramType = getLLVMType(param.first);
         if (!paramType) {
             llvm::errs() << "Erro: Tipo de parâmetro desconhecido\n";
-            // Restaurar estado antes de retornar
             namedValues = std::move(oldNamedValues);
             variableTypes = std::move(oldVariableTypes);
             return;
@@ -906,84 +1168,52 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     if (node->getBody()) {
         Value* bodyValue = nullptr;
         
-        // Verificar se o corpo é um BlockNode
         if (auto blockNode = dynamic_cast<BlockNode*>(node->getBody())) {
             bodyValue = generateBlock(blockNode);
         } else {
-            // Para corpos que não são BlockNode (compatibilidade com versão anterior)
             bodyValue = generateExpr(node->getBody());
         }
         
-        if (!bodyValue) {
-            func->eraseFromParent();
-            currentFunction = nullptr;
-            // Restaurar estado antes de retornar
-            namedValues = std::move(oldNamedValues);
-            variableTypes = std::move(oldVariableTypes);
-            return;
-        }
-        
-        if (!returnType->isVoidTy() && bodyValue->getType() != returnType) {
-            if (returnType->isIntegerTy(1) && bodyValue->getType()->isIntegerTy(32)) {
-                bodyValue = builder->CreateICmpNE(bodyValue, ConstantInt::get(*context, APInt(32, 0)), "boolconv");
-            } else if (returnType->isIntegerTy(32) && bodyValue->getType()->isIntegerTy(1)) {
-                bodyValue = builder->CreateZExt(bodyValue, Type::getInt32Ty(*context), "intconv");
-            } else if (returnType->isFloatTy() && bodyValue->getType()->isIntegerTy(32)) {
-                bodyValue = builder->CreateSIToFP(bodyValue, Type::getFloatTy(*context), "floatconv");
-            } else if (returnType->isIntegerTy(32) && bodyValue->getType()->isFloatTy()) {
-                bodyValue = builder->CreateFPToSI(bodyValue, Type::getInt32Ty(*context), "intconv");
+        // Se a função não terminou com um return, adicionar return apropriado
+        BasicBlock* currentBB = builder->GetInsertBlock();
+        if (!currentBB->getTerminator()) {
+            if (returnType->isVoidTy()) {
+                builder->CreateRetVoid();
             } else {
-                llvm::errs() << "Erro: Tipo de retorno incompatível na função '" 
-                            << node->getName() << "'. Esperado: " << *returnType
-                            << ", obtido: " << *bodyValue->getType() << "\n";
-                func->eraseFromParent();
-                currentFunction = nullptr;
-                namedValues = std::move(oldNamedValues);
-                variableTypes = std::move(oldVariableTypes);
-                return;
+                // Retornar valor padrão baseado no tipo
+                Value* defaultRet = nullptr;
+                if (returnType->isIntegerTy(32)) {
+                    defaultRet = ConstantInt::get(*context, APInt(32, 0));
+                } else if (returnType->isFloatTy()) {
+                    defaultRet = ConstantFP::get(*context, APFloat(0.0f));
+                } else if (returnType->isIntegerTy(1)) {
+                    defaultRet = ConstantInt::get(*context, APInt(1, 0));
+                } else if (returnType->isPointerTy()) {
+                    defaultRet = ConstantPointerNull::get(cast<PointerType>(returnType));
+                }
+                
+                if (defaultRet) {
+                    builder->CreateRet(defaultRet);
+                } else {
+                    builder->CreateUnreachable();
+                }
             }
-        }
-        
-        if (returnType->isVoidTy()) {
-            builder->CreateRetVoid();
-        } else {
-            builder->CreateRet(bodyValue);
         }
     } else {
+        // Função sem corpo
         if (returnType->isVoidTy()) {
             builder->CreateRetVoid();
         } else {
-            Value* retVal = nullptr;
-            if (returnType->isFloatTy()) {
-                retVal = ConstantFP::get(*context, APFloat(0.0f));
-            } else if (returnType->isIntegerTy(32)) {
-                retVal = ConstantInt::get(*context, APInt(32, 0));
-            } else if (returnType->isIntegerTy(1)) {
-                retVal = ConstantInt::get(*context, APInt(1, 0));
-            } else if (returnType->isPointerTy()) {
-                retVal = ConstantPointerNull::get(cast<PointerType>(returnType));
-            }
-            
-            if (retVal) {
-                builder->CreateRet(retVal);
-            } else {
-                builder->CreateUnreachable();
-            }
+            builder->CreateUnreachable();
         }
     }
     
     if (verifyFunction(*func, &llvm::errs())) {
         llvm::errs() << "Erro: Função '" << node->getName() << "' inválida\n";
         func->eraseFromParent();
-        currentFunction = nullptr;
-        namedValues = std::move(oldNamedValues);
-        variableTypes = std::move(oldVariableTypes);
-        return;
     }
     
     currentFunction = nullptr;
-    
-    // Restaurar o estado das tabelas de símbolos (escopo da função termina)
     namedValues = std::move(oldNamedValues);
     variableTypes = std::move(oldVariableTypes);
 }

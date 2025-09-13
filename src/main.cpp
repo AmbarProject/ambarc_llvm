@@ -1,17 +1,22 @@
 #include "LLVMGenerator.hpp"
 #include "ast/nodes/declarations/ProgramNode.hpp"
 #include "ast/nodes/declarations/VarNode.hpp"
-#include "ast/nodes/statements/AssignNode.hpp"
+#include "ast/nodes/declarations/FunctionNode.hpp"
 #include "ast/nodes/expressions/NumberNode.hpp"
 #include "ast/nodes/expressions/BinaryNode.hpp"
 #include "ast/nodes/expressions/BoolNode.hpp"
 #include "ast/nodes/expressions/IdentifierNode.hpp"
 #include "ast/nodes/expressions/StringNode.hpp"
 #include "ast/nodes/expressions/UnaryNode.hpp"
+#include "ast/nodes/expressions/CallNode.hpp"
+#include "ast/nodes/statements/AssignNode.hpp"
 #include "ast/nodes/statements/BlockNode.hpp"
 #include "ast/nodes/statements/BreakNode.hpp"
 #include "ast/nodes/statements/ContinueNode.hpp"
-#include "ast/nodes/statements/ForNode.hpp" // ADICIONADO
+#include "ast/nodes/statements/ForNode.hpp"
+#include "ast/nodes/statements/IfNode.hpp"
+#include "ast/nodes/statements/ReturnNode.hpp"
+#include "ast/nodes/statements/WhileNode.hpp"
 #include <memory>
 #include <utility>
 #include <vector>
@@ -22,88 +27,70 @@ int main() {
     std::unique_ptr<ASTNode> program = std::make_unique<ProgramNode>();
     auto* programPtr = static_cast<ProgramNode*>(program.get());
     
-    // Criar um bloco com escopo local
-    auto block = std::make_unique<BlockNode>(SourceLocation());
-    
-    // 1. Variável local dentro do bloco
-    auto localVar = std::make_unique<VarNode>(
-        "x",
-        "int",
-        std::make_unique<NumberNode>(42),
-        SourceLocation());
-    block->add(std::move(localVar));
-    
-    // 2. Teste de loop for
-    auto forLoop = std::make_unique<ForNode>(
-        // Inicialização: int i = 0
-        std::make_unique<VarNode>(
-            "i",
-            "int",
-            std::make_unique<NumberNode>(0),
-            SourceLocation()
-        ),
-        // Condição: i < 5
-        std::make_unique<BinaryNode>(
-            "<",
-            std::make_unique<IdentifierNode>("i"),
-            std::make_unique<NumberNode>(5),
-            SourceLocation()
-        ),
-        // Atualização: i = i + 1
-        std::make_unique<AssignNode>(
-            "i",
-            std::make_unique<BinaryNode>(
-                "+",
-                std::make_unique<IdentifierNode>("i"),
-                std::make_unique<NumberNode>(1),
-                SourceLocation()
-            ),
-            SourceLocation()
-        ),
-        // Corpo do loop
-        std::make_unique<BlockNode>(SourceLocation())
+    // Função de exemplo que será chamada
+    FunctionNode::ParamList addParams = {{"int", "a"}, {"int", "b"}};
+    auto addFunc = std::make_unique<FunctionNode>(
+        "add",                    // nome
+        "int",                    // tipo de retorno
+        addParams,                // parâmetros
+        nullptr,                  // corpo (será definido depois)
+        SourceLocation()          // localização
     );
     
-    // Adicionar algumas instruções no corpo do loop
-    auto forBody = forLoop->getBody();
-    forBody->add(std::make_unique<AssignNode>(
-        "x",
+    // Corpo da função add
+    auto addBody = std::make_unique<BlockNode>(SourceLocation());
+    addBody->add(std::make_unique<ReturnNode>(
         std::make_unique<BinaryNode>(
             "+",
-            std::make_unique<IdentifierNode>("x"),
-            std::make_unique<IdentifierNode>("i"),
+            std::make_unique<IdentifierNode>("a"),
+            std::make_unique<IdentifierNode>("b"),
             SourceLocation()
         ),
         SourceLocation()
     ));
     
-    block->add(std::move(forLoop));
+    addFunc->setBody(std::move(addBody));
+    programPtr->addDeclaration(std::move(addFunc));
     
-    // 3. Atribuição dentro do bloco
-    auto assign = std::make_unique<AssignNode>(
-        "x",
-        std::make_unique<BinaryNode>(
-            "+",                                    
-            std::make_unique<IdentifierNode>("x"),
-            std::make_unique<NumberNode>(10),       
-            SourceLocation()
-        ),
-        SourceLocation()
-    );
-    block->add(std::move(assign));
+    // Bloco principal
+    auto mainBlock = std::make_unique<BlockNode>(SourceLocation());
     
-    // 4. Adicionar o bloco ao programa
-    programPtr->addDeclaration(std::move(block));
+    // Chamada da função add
+    std::vector<ASTNodePtr> callArgs;
+    callArgs.push_back(std::make_unique<NumberNode>(5));
+    callArgs.push_back(std::make_unique<NumberNode>(3));
     
-    // 5. Variável global fora do bloco
-    auto globalVar = std::make_unique<VarNode>(
-        "global_var",
+    auto callAdd = std::make_unique<CallNode>("add", std::move(callArgs), SourceLocation());
+    
+    // Atribuir resultado a uma variável
+    mainBlock->add(std::make_unique<VarNode>(
+        "result",
         "int",
-        std::make_unique<NumberNode>(100),
-        SourceLocation());
-    programPtr->addDeclaration(std::move(globalVar));
+        std::move(callAdd),
+        SourceLocation()
+    ));
     
-    // 6. Geração do código LLVM IR
+    // Chamada de função sem retorno (exemplo com print)
+    FunctionNode::ParamList printParams = {{"int", "value"}};
+    auto printFunc = std::make_unique<FunctionNode>(
+        "print",                  // nome
+        "void",                   // tipo de retorno
+        printParams,              // parâmetros
+        nullptr,                  // corpo
+        SourceLocation()          // localização
+    );
+    
+    programPtr->addDeclaration(std::move(printFunc));
+    
+    // Chamar print com o resultado
+    std::vector<ASTNodePtr> printArgs;
+    printArgs.push_back(std::make_unique<IdentifierNode>("result"));
+    
+    mainBlock->add(std::make_unique<CallNode>("print", std::move(printArgs), SourceLocation()));
+    
+    programPtr->addDeclaration(std::move(mainBlock));
+    
+    // Geração do código LLVM IR
     LLVMGenerator generator;
     generator.generate(program);
     generator.dumpIR();

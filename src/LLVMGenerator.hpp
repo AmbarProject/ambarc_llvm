@@ -10,12 +10,16 @@
 #include "ast/nodes/expressions/BoolNode.hpp"
 #include "ast/nodes/expressions/IdentifierNode.hpp"
 #include "ast/nodes/expressions/StringNode.hpp"
+#include "ast/nodes/expressions/CallNode.hpp"
 #include "ast/nodes/expressions/UnaryNode.hpp"
 #include "ast/nodes/statements/AssignNode.hpp"
 #include "ast/nodes/statements/BlockNode.hpp"
 #include "ast/nodes/statements/BreakNode.hpp" 
 #include "ast/nodes/statements/ContinueNode.hpp" 
 #include "ast/nodes/statements/ForNode.hpp"
+#include "ast/nodes/statements/IfNode.hpp"
+#include "ast/nodes/statements/ReturnNode.hpp"
+#include "ast/nodes/statements/WhileNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -79,7 +83,10 @@ private:
     llvm::Value* generateBreak(BreakNode* node); 
     llvm::Value* generateContinue(ContinueNode* node); 
     llvm::Value* generateFor(ForNode* node); 
-
+    llvm::Value* generateIf(IfNode* node);
+    llvm::Value* generateReturn(ReturnNode* node);
+    llvm::Value* generateWhile(WhileNode* node);
+    llvm::Value* generateCall(CallNode* node);
 
     void pushLoopBlocks(llvm::BasicBlock* breakBlock, llvm::BasicBlock* continueBlock); 
     void popLoopBlocks();
