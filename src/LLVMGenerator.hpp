@@ -12,6 +12,10 @@
 #include "ast/nodes/expressions/StringNode.hpp"
 #include "ast/nodes/expressions/UnaryNode.hpp"
 #include "ast/nodes/statements/AssignNode.hpp"
+#include "ast/nodes/statements/BlockNode.hpp"
+#include "ast/nodes/statements/BreakNode.hpp" 
+#include "ast/nodes/statements/ContinueNode.hpp" 
+#include "ast/nodes/statements/ForNode.hpp"
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -25,6 +29,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector> 
 
 namespace ambar {
 
@@ -46,6 +51,9 @@ private:
     std::unordered_map<std::string, llvm::GlobalVariable*> globalValues;
     std::unordered_map<std::string, llvm::Type*> globalTypes;
     std::unordered_map<std::string, llvm::GlobalVariable*> stringLiterals;
+        
+    std::vector<llvm::BasicBlock*> breakBlocks;
+    std::vector<llvm::BasicBlock*> continueBlocks;
 
     // Métodos de geração
     void generateProgram(ProgramNode* node);
@@ -67,6 +75,14 @@ private:
     llvm::Value* generateIdentifier(IdentifierNode* node);
     llvm::Value* generateString(StringNode* node);
     llvm::Value* generateAssign(AssignNode* node);
+    llvm::Value* generateBlock(BlockNode* node);
+    llvm::Value* generateBreak(BreakNode* node); 
+    llvm::Value* generateContinue(ContinueNode* node); 
+    llvm::Value* generateFor(ForNode* node); 
+
+
+    void pushLoopBlocks(llvm::BasicBlock* breakBlock, llvm::BasicBlock* continueBlock); 
+    void popLoopBlocks();
 
     // Utilitários
     llvm::Type* getLLVMType(const std::string& typeName);

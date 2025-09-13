@@ -9,12 +9,13 @@ class BreakNode : public ASTNode {
 public:
     BreakNode() 
         : ASTNode(NodeType::BreakNode) {}
-
-    void accept(ASTVisitor& visitor) override;
     
     std::string toString() const override {
         return "BreakNode";
     }
+
+    void accept(ASTVisitor& visitor) override { }
+
 };
 
 } // namespace ambar

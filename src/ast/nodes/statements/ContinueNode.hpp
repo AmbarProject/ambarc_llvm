@@ -7,14 +7,17 @@ namespace ambar {
 
 class ContinueNode : public ASTNode {
 public:
-    ContinueNode();
-    ~ContinueNode() override;
+    ContinueNode()
+        : ASTNode(ASTNode::NodeType::ContinueNode) {}
+    
+    ~ContinueNode() override = default;
 
-    void accept(ASTVisitor& visitor) override;
-    std::string toString() const override;
+    std::string toString() const override {
+        return "ContinueNode";
+    }
 
+    void accept(ASTVisitor& visitor) override {}
 private:
-    // Pode ser estendido no futuro se necessário
 };
 
 } // namespace ambar

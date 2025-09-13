@@ -71,18 +71,9 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     builder->SetInsertPoint(bb);
     
     if (auto programNode = dynamic_cast<ProgramNode*>(astRoot.get())) {
-        // Primeiro: processar apenas declarações de variáveis locais
         for (const auto& decl : programNode->getDeclarations()) {
-            if (auto varNode = dynamic_cast<VarNode*>(decl.get())) {
-                // Criar apenas variáveis locais (não globais)
-                generateLocalVariable(varNode);
-            }
-        }
-        
-        // Segundo: processar assignments
-        for (const auto& decl : programNode->getDeclarations()) {
-            if (auto assignNode = dynamic_cast<AssignNode*>(decl.get())) {
-                generateAssign(assignNode);
+            if (auto blockNode = dynamic_cast<BlockNode*>(decl.get())) {
+                generateBlock(blockNode);
             }
         }
     }
@@ -90,6 +81,32 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     builder->CreateRet(ConstantInt::get(*context, APInt(32, 0)));
     verifyFunction(*mainFunc);
     currentFunction = nullptr;
+}
+
+Value* LLVMGenerator::generateBlock(BlockNode* node) {
+    // Salvar o estado atual das tabelas de símbolos
+    std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
+    std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
+    
+    // Processar declarações locais primeiro
+    for (const auto& decl : node->getLocalDeclarations()) {
+        generateLocalVariable(decl.get());
+    }
+    
+    // Processar statements
+    Value* lastValue = nullptr;
+    for (const auto& stmt : node->getStatements()) {
+        lastValue = generateExpr(stmt.get());
+        if (!lastValue) {
+            break;
+        }
+    }
+    
+    // Restaurar tabelas de símbolos (escopo local termina)
+    namedValues = oldNamedValues;
+    variableTypes = oldVariableTypes;
+    
+    return lastValue;
 }
 
 Value* LLVMGenerator::generateLocalVariable(VarNode* node) {
@@ -473,6 +490,14 @@ Value* LLVMGenerator::generateExpr(ASTNode* node) {
         return generateUnaryExpr(unary);
     } else if (auto assign = dynamic_cast<AssignNode*>(node)) {
         return generateAssign(assign);
+    } else if (auto block = dynamic_cast<BlockNode*>(node)) {
+	return generateBlock(block);
+    } else if (auto breakNode = dynamic_cast<BreakNode*>(node)) {
+        return generateBreak(breakNode);
+    } else if (auto continueNode = dynamic_cast<ContinueNode*>(node)) {
+        return generateContinue(continueNode);
+    } else if (auto forNode = dynamic_cast<ForNode*>(node)) {
+        return generateFor(forNode);
     }
 
     return nullptr;
@@ -519,6 +544,133 @@ Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
 
     llvm::errs() << "Operador unário desconhecido: " << op << "\n";
     return nullptr;
+}
+
+Value* LLVMGenerator::generateBreak(BreakNode* node) {
+    if (breakBlocks.empty()) {
+        llvm::errs() << "Aviso: 'break' fora de um loop - ignorando\n";
+        return ConstantInt::get(*context, APInt(32, 0)); // Retorna dummy
+    }
+    
+    // Criar salto para o bloco de break
+    BasicBlock* breakBlock = breakBlocks.back();
+    builder->CreateBr(breakBlock);
+    
+    // Criar um bloco vazio após o break para evitar instruções órfãs
+    BasicBlock* afterBreak = BasicBlock::Create(*context, "afterbreak", currentFunction);
+    builder->SetInsertPoint(afterBreak);
+    
+    return ConstantInt::get(*context, APInt(32, 0)); // Retorno dummy
+}
+
+Value* LLVMGenerator::generateContinue(ContinueNode* node) {
+    if (continueBlocks.empty()) {
+        llvm::errs() << "Aviso: 'continue' fora de um loop - ignorando\n";
+        return ConstantInt::get(*context, APInt(32, 0)); // Retorna dummy
+    }
+    
+    // Criar salto para o bloco de continue
+    BasicBlock* continueBlock = continueBlocks.back();
+    builder->CreateBr(continueBlock);
+    
+    // Criar um bloco vazio após o continue para evitar instruções órfãs
+    BasicBlock* afterContinue = BasicBlock::Create(*context, "aftercontinue", currentFunction);
+    builder->SetInsertPoint(afterContinue);
+    
+    return ConstantInt::get(*context, APInt(32, 0)); // Retorno dummy
+}
+
+void LLVMGenerator::pushLoopBlocks(BasicBlock* breakBlock, BasicBlock* continueBlock) {
+    breakBlocks.push_back(breakBlock);
+    continueBlocks.push_back(continueBlock);
+}
+
+Value* LLVMGenerator::generateFor(ForNode* node) {
+    // Salvar o estado atual das tabelas de símbolos para o escopo do loop
+    std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
+    std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
+    
+    // Criar blocos básicos para o loop
+    BasicBlock* preheaderBB = builder->GetInsertBlock();
+    BasicBlock* loopBB = BasicBlock::Create(*context, "loop", currentFunction);
+    BasicBlock* bodyBB = BasicBlock::Create(*context, "body", currentFunction);
+    BasicBlock* updateBB = BasicBlock::Create(*context, "update", currentFunction);
+    BasicBlock* afterLoopBB = BasicBlock::Create(*context, "afterloop", currentFunction);
+    
+    // Gerar a expressão de inicialização (se existir)
+    if (node->getInit()) {
+        generateExpr(node->getInit());
+    }
+    
+    // Saltar para o bloco do loop
+    builder->CreateBr(loopBB);
+    
+    // Bloco do loop: verificar condição
+    builder->SetInsertPoint(loopBB);
+    
+    Value* condValue = nullptr;
+    if (node->getCond()) {
+        condValue = generateExpr(node->getCond());
+        if (!condValue) {
+            llvm::errs() << "Erro: Condição do loop for inválida\n";
+            return nullptr;
+        }
+        
+        // Converter para booleano se necessário
+        if (!condValue->getType()->isIntegerTy(1)) {
+            condValue = builder->CreateICmpNE(
+                condValue, 
+                ConstantInt::get(condValue->getType(), 0), 
+                "loopcond");
+        }
+    } else {
+        // Se não há condição, loop infinito (condição sempre verdadeira)
+        condValue = ConstantInt::get(Type::getInt1Ty(*context), 1);
+    }
+    
+    builder->CreateCondBr(condValue, bodyBB, afterLoopBB);
+    
+    // Bloco do corpo
+    builder->SetInsertPoint(bodyBB);
+    
+    // Empilhar blocos de break/continue
+    pushLoopBlocks(afterLoopBB, updateBB);
+    
+    // Gerar o corpo do loop
+    if (node->getBody()) {
+        generateBlock(node->getBody());
+    }
+    
+    // Desempilhar blocos de break/continue
+    popLoopBlocks();
+    
+    // Saltar para o bloco de atualização
+    builder->CreateBr(updateBB);
+    
+    // Bloco de atualização
+    builder->SetInsertPoint(updateBB);
+    
+    // Gerar expressão de atualização (se existir)
+    if (node->getUpdate()) {
+        generateExpr(node->getUpdate());
+    }
+    
+    // Voltar para verificar a condição
+    builder->CreateBr(loopBB);
+    
+    // Bloco após o loop
+    builder->SetInsertPoint(afterLoopBB);
+    
+    // Restaurar tabelas de símbolos (escopo do loop termina)
+    namedValues = oldNamedValues;
+    variableTypes = oldVariableTypes;
+    
+    return ConstantInt::get(*context, APInt(32, 0)); // Retorno dummy
+}
+
+void LLVMGenerator::popLoopBlocks() {
+    if (!breakBlocks.empty()) breakBlocks.pop_back();
+    if (!continueBlocks.empty()) continueBlocks.pop_back();
 }
 
 Value* LLVMGenerator::generateAssign(AssignNode* node) {
@@ -694,6 +846,10 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
         return;
     }
 
+    // Salvar o estado atual das tabelas de símbolos
+    std::unordered_map<std::string, llvm::Value*> oldNamedValues = std::move(namedValues);
+    std::unordered_map<std::string, llvm::Type*> oldVariableTypes = std::move(variableTypes);
+    
     namedValues.clear();
     variableTypes.clear();
 
@@ -702,6 +858,9 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
         Type* paramType = getLLVMType(param.first);
         if (!paramType) {
             llvm::errs() << "Erro: Tipo de parâmetro desconhecido\n";
+            // Restaurar estado antes de retornar
+            namedValues = std::move(oldNamedValues);
+            variableTypes = std::move(oldVariableTypes);
             return;
         }
         paramTypes.push_back(paramType);
@@ -710,6 +869,8 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     Type* returnType = getLLVMType(node->getReturnType());
     if (!returnType) {
         llvm::errs() << "Erro: Tipo de retorno desconhecido\n";
+        namedValues = std::move(oldNamedValues);
+        variableTypes = std::move(oldVariableTypes);
         return;
     }
     
@@ -743,11 +904,22 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     }
     
     if (node->getBody()) {
-        Value* bodyValue = generateExpr(node->getBody());
+        Value* bodyValue = nullptr;
+        
+        // Verificar se o corpo é um BlockNode
+        if (auto blockNode = dynamic_cast<BlockNode*>(node->getBody())) {
+            bodyValue = generateBlock(blockNode);
+        } else {
+            // Para corpos que não são BlockNode (compatibilidade com versão anterior)
+            bodyValue = generateExpr(node->getBody());
+        }
         
         if (!bodyValue) {
             func->eraseFromParent();
             currentFunction = nullptr;
+            // Restaurar estado antes de retornar
+            namedValues = std::move(oldNamedValues);
+            variableTypes = std::move(oldVariableTypes);
             return;
         }
         
@@ -758,9 +930,16 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
                 bodyValue = builder->CreateZExt(bodyValue, Type::getInt32Ty(*context), "intconv");
             } else if (returnType->isFloatTy() && bodyValue->getType()->isIntegerTy(32)) {
                 bodyValue = builder->CreateSIToFP(bodyValue, Type::getFloatTy(*context), "floatconv");
+            } else if (returnType->isIntegerTy(32) && bodyValue->getType()->isFloatTy()) {
+                bodyValue = builder->CreateFPToSI(bodyValue, Type::getInt32Ty(*context), "intconv");
             } else {
+                llvm::errs() << "Erro: Tipo de retorno incompatível na função '" 
+                            << node->getName() << "'. Esperado: " << *returnType
+                            << ", obtido: " << *bodyValue->getType() << "\n";
                 func->eraseFromParent();
                 currentFunction = nullptr;
+                namedValues = std::move(oldNamedValues);
+                variableTypes = std::move(oldVariableTypes);
                 return;
             }
         }
@@ -794,9 +973,19 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     }
     
     if (verifyFunction(*func, &llvm::errs())) {
+        llvm::errs() << "Erro: Função '" << node->getName() << "' inválida\n";
         func->eraseFromParent();
+        currentFunction = nullptr;
+        namedValues = std::move(oldNamedValues);
+        variableTypes = std::move(oldVariableTypes);
+        return;
     }
+    
     currentFunction = nullptr;
+    
+    // Restaurar o estado das tabelas de símbolos (escopo da função termina)
+    namedValues = std::move(oldNamedValues);
+    variableTypes = std::move(oldVariableTypes);
 }
 
 Type* LLVMGenerator::getLLVMType(const std::string& typeName) {

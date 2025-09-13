@@ -18,7 +18,12 @@ public:
     ForNode(std::unique_ptr<ASTNode> init,
             std::unique_ptr<ASTNode> cond,
             std::unique_ptr<ASTNode> update,
-            std::unique_ptr<BlockNode> body);
+            std::unique_ptr<BlockNode> body)
+        : ASTNode(ASTNode::NodeType::ForNode),
+          init_(std::move(init)),
+          cond_(std::move(cond)),
+          update_(std::move(update)),
+          body_(std::move(body)) {}
     
     ~ForNode() override = default;
 
@@ -46,11 +51,19 @@ public:
      */
     BlockNode* getBody() const { return body_.get(); }
 
-    // Visitor pattern
-    void accept(ASTVisitor& visitor) override;
+    // Visitor pattern (mantido para compatibilidade, mas pode ser removido se não usar visitor)
+    void accept(class ASTVisitor& visitor) override { }
 
     // Debug representation
-    std::string toString() const override;
+    std::string toString() const override {
+        std::string initStr = init_ ? init_->toString() : "null";
+        std::string condStr = cond_ ? cond_->toString() : "null";
+        std::string updateStr = update_ ? update_->toString() : "null";
+        
+        return "ForNode(init=" + initStr + 
+               ", cond=" + condStr + 
+               ", update=" + updateStr + ")";
+    }
 
 private:
     std::unique_ptr<ASTNode> init_;
