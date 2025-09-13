@@ -1,7 +1,7 @@
 FROM silkeh/clang:16
 
 # Metadados
-LABEL maintainer="Seu Nome <seu.email@example.com>"
+LABEL maintainer="K1Melo <kauafernandes.smelo@gmail.com>"
 LABEL version="1.0"
 
 # Instalar dependências básicas
