@@ -33,6 +33,7 @@
 
 extern "C" {
     int yylex();
+    int yyparse();
     void yyerror(const char *s);
     extern FILE *yyin;
     extern int yylineno;
@@ -40,11 +41,12 @@ extern "C" {
 
 namespace ambar {
     class ASTNode;
-    extern std::unique_ptr<ASTNode> astRoot;
+        std::unique_ptr<ASTNode> astRoot = nullptr;
 }
 
 using namespace ambar;
 
+extern std::unique_ptr<ambar::ASTNode> ambar::astRoot;
 %}
 
 %union {

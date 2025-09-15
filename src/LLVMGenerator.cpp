@@ -69,19 +69,34 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     builder->SetInsertPoint(bb);
     
     if (auto programNode = dynamic_cast<ProgramNode*>(astRoot.get())) {
+        // Primeiro: processar variáveis globais (se houver)
         for (const auto& decl : programNode->getDeclarations()) {
-            // Processa apenas BlockNodes (código do programa principal)
+            if (auto varNode = dynamic_cast<VarNode*>(decl.get())) {
+                // Variável global - já foi processada em handleGlobalVariables
+                // Mas precisamos garantir que existe e pode ser usada
+                if (globalValues.count(varNode->getName())) {
+                    // Variável global existe, pode ser usada
+                }
+            }
+        }
+        
+        // Segundo: processar o código do programa principal
+        for (const auto& decl : programNode->getDeclarations()) {
             if (auto blockNode = dynamic_cast<BlockNode*>(decl.get())) {
                 generateBlock(blockNode);
             }
-            // Ignora FunctionNodes (já foram processadas)
         }
     }
     
-    builder->CreateRet(ConstantInt::get(*context, APInt(32, 0)));
+    // Se a função não terminou com um return, adicionar return 0
+    BasicBlock* currentBB = builder->GetInsertBlock();
+    if (!currentBB->getTerminator()) {
+        builder->CreateRet(ConstantInt::get(*context, APInt(32, 0)));
+    }
+    
     verifyFunction(*mainFunc);
     currentFunction = nullptr;
-}
+
 
 Value* LLVMGenerator::generateBlock(BlockNode* node) {
     // Salvar o estado atual das tabelas de símbolos
