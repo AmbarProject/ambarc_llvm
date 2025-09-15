@@ -1,10 +1,8 @@
 #pragma once
-
 #include "../ASTNode.hpp"
 #include "BlockNode.hpp" 
 
 namespace ambar {
-
 class ForNode : public ASTNode {
 public:
     /**
@@ -26,34 +24,34 @@ public:
           body_(std::move(body)) {}
     
     ~ForNode() override = default;
-
+    
     /**
      * @brief Get the initialization expression
      * @return ASTNode* Ponteiro para a expressão de inicialização
      */
     ASTNode* getInit() const { return init_.get(); }
-
+    
     /**
      * @brief Get the condition expression
      * @return ASTNode* Ponteiro para a expressão de condição
      */
     ASTNode* getCond() const { return cond_.get(); }
-
+    
     /**
      * @brief Get the update expression
      * @return ASTNode* Ponteiro para a expressão de atualização
      */
     ASTNode* getUpdate() const { return update_.get(); }
-
+    
     /**
      * @brief Get the body block
      * @return BlockNode* Ponteiro para o bloco de código
      */
     BlockNode* getBody() const { return body_.get(); }
-
-    // Visitor pattern (mantido para compatibilidade, mas pode ser removido se não usar visitor)
+    
+    // Visitor pattern
     void accept(class ASTVisitor& visitor) override { }
-
+    
     // Debug representation
     std::string toString() const override {
         std::string initStr = init_ ? init_->toString() : "null";
@@ -71,5 +69,4 @@ private:
     std::unique_ptr<ASTNode> update_;
     std::unique_ptr<BlockNode> body_;
 };
-
 } // namespace ambar

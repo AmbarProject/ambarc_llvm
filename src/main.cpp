@@ -1,99 +1,118 @@
-#include "LLVMGenerator.hpp"
-#include "ast/nodes/declarations/ProgramNode.hpp"
-#include "ast/nodes/declarations/VarNode.hpp"
-#include "ast/nodes/declarations/FunctionNode.hpp"
-#include "ast/nodes/expressions/NumberNode.hpp"
-#include "ast/nodes/expressions/BinaryNode.hpp"
-#include "ast/nodes/expressions/BoolNode.hpp"
-#include "ast/nodes/expressions/IdentifierNode.hpp"
-#include "ast/nodes/expressions/StringNode.hpp"
-#include "ast/nodes/expressions/UnaryNode.hpp"
-#include "ast/nodes/expressions/CallNode.hpp"
-#include "ast/nodes/statements/AssignNode.hpp"
-#include "ast/nodes/statements/BlockNode.hpp"
-#include "ast/nodes/statements/BreakNode.hpp"
-#include "ast/nodes/statements/ContinueNode.hpp"
-#include "ast/nodes/statements/ForNode.hpp"
-#include "ast/nodes/statements/IfNode.hpp"
-#include "ast/nodes/statements/ReturnNode.hpp"
-#include "ast/nodes/statements/WhileNode.hpp"
+#include <iostream>
+#include <cstdio>
+#include <fstream>
 #include <memory>
-#include <utility>
-#include <vector>
+#include "ast/nodes/ASTNode.hpp"
+#include "LLVMGenerator.hpp"
 
-using namespace ambar;
+extern "C" {
+    int yyparse(void);
+    extern FILE* yyin;
+}
 
-int main() {
-    std::unique_ptr<ASTNode> program = std::make_unique<ProgramNode>();
-    auto* programPtr = static_cast<ProgramNode*>(program.get());
+// Correção: usar o namespace ambar e a declaração correta
+namespace ambar {
+    extern std::unique_ptr<ASTNode> astRoot;
+}
+
+int main(int argc, char **argv) {
+    // Imprime ASCII Art
+    std::cout << R"(
+
+
+
+              @@                                                                                                            
+              @@                                                                                                            
+              @@@                                                                                                           
+           @@  @@@                                                                                                          
+          @@@@  @@@                                                                                                         
+           @@@@  @@@                                                                                                        
+            @@@@  @@@                                                                                                       
+             @@@@  @@@           @@@@@@       @@@@@@  @@@@@@@@@@@@         @@@@@@@       @@@@@@@@@@@        @@@@@@@@@       
+              @@@@  @@@          @@@@@@@     @@@@@@@  @@@@@@@@@@@@@@      @@@@@@@@       @@@@@@@@@@@@@    @@@@@@@@@@@@@     
+               @@@   @@@         @@@@@@@     @@@@@@@  @@@@@    @@@@@      @@@@@@@@@      @@@@    @@@@@   @@@@@     @@@@@    
+                @@@   @@@        @@@@@@@@   @@@@@@@@  @@@@@   @@@@@      @@@@@ @@@@@     @@@@    @@@@@  @@@@@               
+    @@@@@@@@@@@@@@@@   @@@       @@@@ @@@@ @@@@ @@@@  @@@@@@@@@@@@      @@@@@  @@@@@     @@@@@@@@@@@@@  @@@@@               
+   @@@@@@@@@@@@@@@@@@  @@@@      @@@@ @@@@@@@@  @@@@  @@@@@    @@@@@    @@@@@@@@@@@@@    @@@@@@@@@@@    @@@@@               
+                        @@@@     @@@@  @@@@@@@  @@@@  @@@@@    @@@@@@  @@@@@@@@@@@@@@@   @@@@  @@@@@     @@@@@     @@@@@    
+ @@@@@@@@@@@@@@@@@@@@@@@@@@@@    @@@@   @@@@@   @@@@  @@@@@@@@@@@@@@  @@@@@      @@@@@   @@@@   @@@@@     @@@@@@@@@@@@@     
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   @@@@    @@@    @@@@  @@@@@@@@@@@@    @@@@@       @@@@@  @@@@    @@@@@      @@@@@@@@@       
+                                                                                                                            
+                                                                                                                            
+                                                                                                                            
+Welcome to Ambar Compiler (v0.1).
+
+Type your code below:
+
+)" << std::endl;
+
+   std::string inputFile;
     
-    // Função de exemplo que será chamada
-    FunctionNode::ParamList addParams = {{"int", "a"}, {"int", "b"}};
-    auto addFunc = std::make_unique<FunctionNode>(
-        "add",                    // nome
-        "int",                    // tipo de retorno
-        addParams,                // parâmetros
-        nullptr,                  // corpo (será definido depois)
-        SourceLocation()          // localização
-    );
+    if (argc > 1) {
+        inputFile = argv[1];
+        yyin = fopen(inputFile.c_str(), "r");
+        if (!yyin) {
+            std::cerr << "Erro ao abrir o arquivo: " << inputFile << std::endl;
+            return 1;
+        }
+        std::cout << "Compilando: " << inputFile << std::endl;
+    } else {
+        std::cout << "Digite seu código Ambar (Ctrl+D para finalizar):" << std::endl;
+        yyin = stdin;
+    }
+
+    int result = yyparse();
     
-    // Corpo da função add
-    auto addBody = std::make_unique<BlockNode>(SourceLocation());
-    addBody->add(std::make_unique<ReturnNode>(
-        std::make_unique<BinaryNode>(
-            "+",
-            std::make_unique<IdentifierNode>("a"),
-            std::make_unique<IdentifierNode>("b"),
-            SourceLocation()
-        ),
-        SourceLocation()
-    ));
-    
-    addFunc->setBody(std::move(addBody));
-    programPtr->addDeclaration(std::move(addFunc));
-    
-    // Bloco principal
-    auto mainBlock = std::make_unique<BlockNode>(SourceLocation());
-    
-    // Chamada da função add
-    std::vector<ASTNodePtr> callArgs;
-    callArgs.push_back(std::make_unique<NumberNode>(5));
-    callArgs.push_back(std::make_unique<NumberNode>(3));
-    
-    auto callAdd = std::make_unique<CallNode>("add", std::move(callArgs), SourceLocation());
-    
-    // Atribuir resultado a uma variável
-    mainBlock->add(std::make_unique<VarNode>(
-        "result",
-        "int",
-        std::move(callAdd),
-        SourceLocation()
-    ));
-    
-    // Chamada de função sem retorno (exemplo com print)
-    FunctionNode::ParamList printParams = {{"int", "value"}};
-    auto printFunc = std::make_unique<FunctionNode>(
-        "print",                  // nome
-        "void",                   // tipo de retorno
-        printParams,              // parâmetros
-        nullptr,                  // corpo
-        SourceLocation()          // localização
-    );
-    
-    programPtr->addDeclaration(std::move(printFunc));
-    
-    // Chamar print com o resultado
-    std::vector<ASTNodePtr> printArgs;
-    printArgs.push_back(std::make_unique<IdentifierNode>("result"));
-    
-    mainBlock->add(std::make_unique<CallNode>("print", std::move(printArgs), SourceLocation()));
-    
-    programPtr->addDeclaration(std::move(mainBlock));
-    
-    // Geração do código LLVM IR
-    LLVMGenerator generator;
-    generator.generate(program);
-    generator.dumpIR();
-    
+    if (result == 0) {
+        std::cout << "✅ Análise sintática concluída com sucesso!" << std::endl;
+
+        if (ambar::astRoot) {
+            std::cout << "✅ AST construída com sucesso!" << std::endl;
+            
+            try {
+                // Criar gerador LLVM
+                ambar::LLVMGenerator generator;
+                
+                // Gerar código LLVM IR a partir da AST
+                generator.generate(ambar::astRoot);
+                
+                std::cout << "✅ Geração de código LLVM IR concluída!" << std::endl;
+                
+                // Exibir o código IR gerado
+                std::cout << "\n=== CÓDIGO LLVM IR GERADO ===" << std::endl;
+                generator.dumpIR();
+                
+                // Salvar em arquivo se foi passado um arquivo de entrada
+                if (!inputFile.empty()) {
+                    std::string outputFile = inputFile + ".ll";
+                    std::error_code EC;
+                    llvm::raw_fd_ostream dest(outputFile, EC);
+                    if (EC) {
+                        std::cerr << "❌ Erro ao salvar IR: " << EC.message() << std::endl;
+                        return 1;
+                    }
+                    generator.dumpIRToFile(outputFile);
+                    std::cout << "✅ IR salvo em: " << outputFile << std::endl;
+                }
+                
+            } catch (const std::exception& e) {
+                std::cerr << "❌ Erro durante a geração de código: " << e.what() << std::endl;
+                return 1;
+            }
+            
+        } else {
+            std::cerr << "❌ AST não foi construída." << std::endl;
+            return 1;
+        }
+
+    } else {
+        std::cerr << "❌ Erro na análise sintática." << std::endl;
+        return result;
+    }
+
+    if (yyin && yyin != stdin) {
+        fclose(yyin);
+    }
+
     return 0;
 }

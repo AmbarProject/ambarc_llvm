@@ -42,10 +42,10 @@ public:
     LLVMGenerator();
     void generate(std::unique_ptr<ASTNode>& astRoot);
     void dumpIR() const;
-
+    std::unique_ptr<llvm::Module> module;
+    void dumpIRToFile(const std::string& filename) const;
 private:
     std::unique_ptr<llvm::LLVMContext> context;
-    std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
     llvm::Function* currentFunction = nullptr;
 

@@ -1229,3 +1229,14 @@ Type* LLVMGenerator::getLLVMType(const std::string& typeName) {
 void LLVMGenerator::dumpIR() const {
     module->print(llvm::errs(), nullptr);
 }
+
+void LLVMGenerator::dumpIRToFile(const std::string& filename) const {
+    std::error_code EC;
+    llvm::raw_fd_ostream out(filename, EC);
+    if (EC) {
+        llvm::errs() << "Erro ao abrir arquivo: " << EC.message() << "\n";
+        return;
+    }
+    module->print(out, nullptr);
+    out.close();
+}

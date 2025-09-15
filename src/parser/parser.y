@@ -1,76 +1,84 @@
-%language "c++"
 %code requires {
-    #include "ast/nodes/ASTNode.hpp"
-    #include "ast/nodes/expressions/BinaryNode.hpp"
-    #include "ast/nodes/expressions/BoolNode.hpp"
-    #include "ast/nodes/expressions/CallNode.hpp"
-    #include "ast/nodes/expressions/IdentifierNode.hpp"
-    #include "ast/nodes/expressions/NumberNode.hpp"
-    #include "ast/nodes/expressions/UnaryNode.hpp"
+#include <cstdio>
+#include <memory>
+#include <vector>
+#include <string>
 
-    #include "ast/nodes/statements/AssignNode.hpp"
-    #include "ast/nodes/statements/BlockNode.hpp"
-    #include "ast/nodes/statements/IfNode.hpp"
-    #include "ast/nodes/statements/ReturnNode.hpp"
-    #include "ast/nodes/statements/WhileNode.hpp"
+#include "../ast/nodes/ASTNode.hpp"
+#include "../ast/nodes/expressions/BinaryNode.hpp"
+#include "../ast/nodes/expressions/BoolNode.hpp"
+#include "../ast/nodes/expressions/CallNode.hpp"
+#include "../ast/nodes/expressions/IdentifierNode.hpp"
+#include "../ast/nodes/expressions/NumberNode.hpp"
+#include "../ast/nodes/expressions/StringNode.hpp"
+#include "../ast/nodes/expressions/UnaryNode.hpp"
 
-    #include "ast/nodes/declarations/FunctionNode.hpp"
-    #include "ast/nodes/declarations/ProgramNode.hpp"
-    #include "ast/nodes/declarations/VarNode.hpp"
+#include "../ast/nodes/statements/AssignNode.hpp"
+#include "../ast/nodes/statements/BlockNode.hpp"
+#include "../ast/nodes/statements/BreakNode.hpp"
+#include "../ast/nodes/statements/ContinueNode.hpp"
+#include "../ast/nodes/statements/ForNode.hpp"
+#include "../ast/nodes/statements/IfNode.hpp"
+#include "../ast/nodes/statements/ReturnNode.hpp"
+#include "../ast/nodes/statements/WhileNode.hpp"
 
-    #include <memory>
-    #include <vector>
-    #include <string>
-    
-    namespace ambar {
-        extern std::unique_ptr<ASTNode> astRoot;
-    }
+#include "../ast/nodes/declarations/FunctionNode.hpp"
+#include "../ast/nodes/declarations/ProgramNode.hpp"
+#include "../ast/nodes/declarations/VarNode.hpp"
 }
 
-%code top {
-    #include "ast/nodes/ASTNode.hpp"
-    
-    extern "C" {
-        int yylex();
-        void yyerror(const char *s);
-        extern FILE *yyin;
-        extern int yylineno;
-    }
-    
-    using namespace ambar;
+%{
+#include <cstdio>
+#include <memory>
+
+extern "C" {
+    int yylex();
+    void yyerror(const char *s);
+    extern FILE *yyin;
+    extern int yylineno;
 }
 
-%define api.value.type {std::unique_ptr<ambar::ASTNode>}
-%define parse.error verbose
+namespace ambar {
+    class ASTNode;
+    extern std::unique_ptr<ASTNode> astRoot;
+}
 
-%token <std::string*> IDENTIFIER
-%token <long> NUM_INT
-%token <double> NUM_REAL
+using namespace ambar;
+
+%}
+
+%union {
+    int num;
+    float real;
+    bool bval;
+    char* id;
+    ambar::ASTNode* node;
+    std::string* str;
+    std::vector<ambar::ASTNode*>* stmts;
+    std::vector<std::pair<std::string, std::string>>* params;
+}
+
+%type <node> program decl_list decl var_decl stmt assign_stmt call_stmt 
+             return_stmt if_stmt while_stmt for_stmt break_stmt continue_stmt 
+             block expr logic_expr rel_expr arith_expr term factor func_call
+             func_decl import_decl
+
+%type <str> type
+%type <stmts> stmt_list
+%type <params> params opt_params
+%type <stmts> opt_args args
+
+%token <id> IDENTIFIER
+%token <num> NUM_INT
+%token <real> NUM_REAL
+%token <str> STRING
 %token BOOL_TRUE BOOL_FALSE
 
-%token FUNC RETURN IF ELSE WHILE
-%token INT FLOAT BOOL VOID
+%token IMPORT FUNC RETURN IF ELSE WHILE FOR BREAK CONTINUE
+%token INT FLOAT BOOL STRING_T VOID
 %token AND OR NOT EQ NEQ LT LE GT GE
-%token ADD SUB MUL DIV MOD ASSIGN
-%token SEMI COLON COMMA LPAREN RPAREN LBRACE RBRACE
-
-%right ASSIGN            
-%left OR                 
-%left AND               
-%left EQ NEQ                
-%left LT GT LE GE           
-%left ADD SUB               
-%left MUL DIV MOD           
-%right UNARY NOT
-
-%type <std::unique_ptr<ASTNode>*> program decl_list decl var_decl func_decl
-%type <std::unique_ptr<ASTNode>*> stmt assign_stmt return_stmt
-%type <std::unique_ptr<ASTNode>*> if_stmt while_stmt block
-%type <std::unique_ptr<ASTNode>*> expr logic_expr
-%type <std::unique_ptr<ASTNode>*> rel_expr arith_expr term factor unary_expr
-%type <std::string*> type
-%type <std::vector<std::unique_ptr<ASTNode>>*> stmt_list
-%type <std::vector<std::pair<std::string, std::string>>*> params opt_params
+%token ADD SUB MUL DIV MOD ASSIGN ARROW
+%token SEMI COLON COMMA DOT LPAREN RPAREN LBRACE RBRACE
 
 %start program
 
@@ -78,325 +86,410 @@
 
 program:
     decl_list {
-        ambar::astRoot = std::move(*$1);
-        delete $1;
+        auto prog = std::make_unique<ambar::ProgramNode>();
+        ambar::ProgramNode* existingProg = dynamic_cast<ambar::ProgramNode*>($1);
+        if (existingProg) {
+            astRoot = std::unique_ptr<ambar::ASTNode>($1);
+        } else {
+            prog->addDeclaration(std::unique_ptr<ambar::ASTNode>($1));
+            astRoot = std::move(prog);
+        }
+        $$ = astRoot.get();
     }
 ;
 
 decl_list:
-    decl {
-        $$ = new std::unique_ptr<ASTNode>(std::make_unique<ProgramNode>());
-        dynamic_cast<ProgramNode*>($$->get())->add(std::move(*$1));
-        delete $1;
-    }
+      decl {
+          auto p = std::make_unique<ambar::ProgramNode>();
+          if ($1) {
+              p->addDeclaration(std::unique_ptr<ambar::ASTNode>($1));
+          }
+          $$ = p.release();
+      }
     | decl_list decl {
-        ProgramNode* prog = dynamic_cast<ProgramNode*>($1->get());
-        if (prog && $2) {
-            prog->add(std::move(*$2));
-            delete $2;
-        }
-        $$ = $1;
-    }
+          ambar::ProgramNode* p = dynamic_cast<ambar::ProgramNode*>($1);
+          if (p && $2) {
+              p->addDeclaration(std::unique_ptr<ambar::ASTNode>($2));
+          }
+          $$ = p;
+      }
 ;
 
-decl:
-    var_decl        { $$ = $1; }
-    | func_decl     { $$ = $1; }
-    | stmt          { $$ = $1; }
+decl: 
+      import_decl         { $$ = nullptr; }
+    | var_decl            { $$ = $1; }
+    | func_decl           { $$ = $1; }
+    | stmt                { $$ = $1; }
+;
+
+import_decl: 
+    IMPORT IDENTIFIER ARROW IDENTIFIER SEMI { $$ = nullptr; }
 ;
 
 var_decl:
-    IDENTIFIER COLON type ASSIGN expr SEMI {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<VarNode>(*$1, *$3, std::move(*$5)));
-        delete $1;
-        delete $3;
-        delete $5;
-    }
-    | IDENTIFIER COLON type SEMI {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<VarNode>(*$1, *$3, nullptr));
-        delete $1;
-        delete $3;
-    }
+      IDENTIFIER COLON type ASSIGN expr SEMI { 
+          auto var = std::make_unique<ambar::VarNode>(std::string($1), *$3, std::unique_ptr<ambar::ASTNode>($5));
+          delete $3;
+          free($1);
+          $$ = var.release();
+      }
+    | IDENTIFIER COLON type SEMI { 
+          auto var = std::make_unique<ambar::VarNode>(std::string($1), *$3, nullptr);
+          delete $3;
+          free($1);
+          $$ = var.release();
+      }
 ;
 
-func_decl:
-    FUNC IDENTIFIER LPAREN opt_params RPAREN COLON type block {
-        auto blockPtr = std::unique_ptr<BlockNode>(dynamic_cast<BlockNode*>($8->release()));
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<FunctionNode>(*$2, *$7, std::move(*$4), std::move(blockPtr)));
-        delete $2;
-        delete $4;
+func_decl: 
+    FUNC IDENTIFIER LPAREN opt_params RPAREN ARROW type block {
+        auto params_vec = ($4 != nullptr) ? *$4 : std::vector<std::pair<std::string, std::string>>();
+        auto func = std::make_unique<ambar::FunctionNode>(
+            std::string($2), 
+            *$7,
+            std::move(params_vec),
+            std::unique_ptr<ambar::BlockNode>(dynamic_cast<ambar::BlockNode*>($8))
+        );
+        delete $4; 
         delete $7;
+        free($2);
+        $$ = func.release();
     }
 ;
 
-opt_params:
-    %empty {
-        $$ = new std::vector<std::pair<std::string, std::string>>();
-    }
-    | params {
-        $$ = $1;
-    }
+opt_params: 
+      /* empty */ { $$ = nullptr; }  
+    | params { $$ = $1; } 
 ;
 
-params:
-    IDENTIFIER COLON type {
-        $$ = new std::vector<std::pair<std::string, std::string>>{ { *$1, *$3 } };
-        delete $1;
-        delete $3;
-    }
+params: 
+      IDENTIFIER COLON type {
+          $$ = new std::vector<std::pair<std::string, std::string>>();
+          $$->push_back({std::string($1), *$3});
+          delete $3; 
+          free($1);
+      }
     | params COMMA IDENTIFIER COLON type {
-        $1->emplace_back(*$3, *$5);
-        delete $3;
-        delete $5;
-        $$ = $1;
-    }
+          $1->push_back({std::string($3), *$5});
+          delete $5; 
+          free($3);
+          $$ = $1;
+      }
 ;
 
 type:
     INT       { $$ = new std::string("int"); }
-    | FLOAT   { $$ = new std::string("float"); }
-    | BOOL    { $$ = new std::string("bool"); }
-    | VOID    { $$ = new std::string("void"); }
+  | FLOAT     { $$ = new std::string("float"); }
+  | BOOL      { $$ = new std::string("bool"); }
+  | STRING_T  { $$ = new std::string("string"); }
+  | VOID      { $$ = new std::string("void"); }
 ;
 
-stmt:
-    var_decl         { $$ = $1; }
-    | assign_stmt    { $$ = $1; }
-    | return_stmt    { $$ = $1; }
-    | if_stmt        { $$ = $1; }
-    | while_stmt     { $$ = $1; }
-    | block          { $$ = $1; }
+stmt: 
+      assign_stmt      { $$ = $1; }
+    | call_stmt        { $$ = $1; }
+    | return_stmt      { $$ = $1; }
+    | if_stmt          { $$ = $1; }
+    | while_stmt       { $$ = $1; }
+    | for_stmt         { $$ = $1; }
+    | break_stmt       { $$ = $1; }
+    | continue_stmt    { $$ = $1; }
+    | block            { $$ = $1; }
 ;
 
-assign_stmt:
-    IDENTIFIER ASSIGN expr SEMI {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<AssignNode>(*$1, std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-;
-
-return_stmt:
-    RETURN expr SEMI {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<ReturnNode>(std::move(*$2)));
-        delete $2;
-    }
-    | RETURN SEMI {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<ReturnNode>(nullptr));
+assign_stmt: 
+    IDENTIFIER ASSIGN expr SEMI { 
+        auto assign = std::make_unique<ambar::AssignNode>($1, std::unique_ptr<ambar::ASTNode>($3));
+        free($1);
+        $$ = assign.release();
     }
 ;
 
-if_stmt:
-    IF LPAREN expr RPAREN block {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<IfNode>(std::move(*$3), std::move(*$5)));
-        delete $3;
-        delete $5;
-    }
-    | IF LPAREN expr RPAREN block ELSE block {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<IfNode>(std::move(*$3), std::move(*$5), std::move(*$7)));
-        delete $3;
-        delete $5;
-        delete $7;
-    }
+call_stmt: 
+    func_call SEMI { $$ = $1; }
 ;
+
+return_stmt: 
+      RETURN expr SEMI { 
+          auto ret = std::make_unique<ambar::ReturnNode>(std::unique_ptr<ambar::ASTNode>($2));
+          $$ = ret.release();
+      }
+    | RETURN SEMI { 
+          auto ret = std::make_unique<ambar::ReturnNode>();
+          $$ = ret.release();
+      }
+;
+
+if_stmt: 
+      IF LPAREN expr RPAREN stmt {
+          auto ifNode = std::make_unique<ambar::IfNode>(
+              std::unique_ptr<ambar::ASTNode>($3), 
+              std::unique_ptr<ambar::ASTNode>($5)
+          );
+          $$ = ifNode.release();
+      }
+    | IF LPAREN expr RPAREN stmt ELSE stmt {
+          auto ifNode = std::make_unique<ambar::IfNode>(
+              std::unique_ptr<ambar::ASTNode>($3), 
+              std::unique_ptr<ambar::ASTNode>($5), 
+              std::unique_ptr<ambar::ASTNode>($7)
+          );
+          $$ = ifNode.release();
+      }
+;
+
 while_stmt:
-    WHILE LPAREN expr RPAREN block {
-        auto blockPtr = std::unique_ptr<BlockNode>(dynamic_cast<BlockNode*>($5->release()));
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<WhileNode>(std::move(*$3), std::move(blockPtr)));
-        delete $3;
-        delete $5;
+    WHILE LPAREN expr RPAREN stmt {
+        auto whileNode = std::make_unique<ambar::WhileNode>(
+            std::unique_ptr<ambar::ASTNode>($3), 
+            std::unique_ptr<ambar::ASTNode>($5)
+        );
+        $$ = whileNode.release();
+    }
+;
+
+for_stmt: 
+    FOR LPAREN assign_stmt expr SEMI assign_stmt RPAREN stmt {
+        auto forNode = std::make_unique<ambar::ForNode>(
+            std::unique_ptr<ambar::ASTNode>($3),
+            std::unique_ptr<ambar::ASTNode>($4),
+            std::unique_ptr<ambar::ASTNode>($6),
+            std::unique_ptr<ambar::BlockNode>(dynamic_cast<ambar::BlockNode*>($8))
+        );
+        $$ = forNode.release();
+    }
+;
+
+break_stmt: 
+    BREAK SEMI { 
+        auto breakNode = std::make_unique<ambar::BreakNode>();
+        $$ = breakNode.release();
+    }
+;
+
+continue_stmt: 
+    CONTINUE SEMI { 
+        auto continueNode = std::make_unique<ambar::ContinueNode>();
+        $$ = continueNode.release();
     }
 ;
 
 block:
     LBRACE RBRACE {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BlockNode>());
+        auto blk = std::make_unique<ambar::BlockNode>();
+        $$ = blk.release();
     }
     | LBRACE stmt_list RBRACE {
-        auto blk = std::make_unique<BlockNode>();
-        for (auto& stmt : *$2) {
-            if (stmt) {
-                blk->add(std::move(stmt));
+        auto blk = std::make_unique<ambar::BlockNode>();
+        if ($2) {
+            for (ambar::ASTNode* stmt : *$2) {
+                if (stmt) {
+                    blk->add(std::unique_ptr<ambar::ASTNode>(stmt));
+                }
             }
+            delete $2;
         }
-        $$ = new std::unique_ptr<ASTNode>(std::move(blk));
-        delete $2;
+        $$ = blk.release();
     }
 ;
 
 stmt_list:
-    stmt {
-        $$ = new std::vector<std::unique_ptr<ASTNode>>();
-        if ($1) {
-            $$->push_back(std::move(*$1));
-            delete $1;
-        }
-    }
+      stmt {
+        $$ = new std::vector<ambar::ASTNode*>();
+        if ($1) $$->push_back($1);
+      }
     | stmt_list stmt {
-        if ($2) {
-            $1->push_back(std::move(*$2));
-            delete $2;
+        if ($2) $1->push_back($2);
+        $$ = $1;
+      }
+;
+
+opt_args: 
+      /* empty */ { $$ = new std::vector<ambar::ASTNode*>(); }
+    | args { $$ = $1; }
+;
+
+args: 
+      expr { 
+          $$ = new std::vector<ambar::ASTNode*>(); 
+          if ($1) $$->push_back($1); 
+      }
+    | args COMMA expr { 
+          if ($3) $1->push_back($3); 
+          $$ = $1; 
+      }
+;
+
+expr: 
+    logic_expr { $$ = $1; }
+;
+
+logic_expr: 
+      rel_expr { $$ = $1; }
+    | logic_expr AND rel_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "AND", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | logic_expr OR rel_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "OR", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+;
+
+rel_expr: 
+      arith_expr { $$ = $1; }
+    | arith_expr EQ arith_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "==", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | arith_expr NEQ arith_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "!=", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | arith_expr LT arith_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "<", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | arith_expr LE arith_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "<=", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | arith_expr GT arith_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              ">", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | arith_expr GE arith_expr { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              ">=", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+;
+
+arith_expr: 
+      term { $$ = $1; }
+    | arith_expr ADD term { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "+", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | arith_expr SUB term { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "-", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+;
+
+term: 
+      factor { $$ = $1; }
+    | term MUL factor { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "*", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+    | term DIV factor { 
+          auto binNode = std::make_unique<ambar::BinaryNode>(
+              "/", 
+              std::unique_ptr<ambar::ASTNode>($1), 
+              std::unique_ptr<ambar::ASTNode>($3)
+          );
+          $$ = binNode.release();
+      }
+;
+
+factor: 
+      NUM_INT        { 
+          auto numNode = std::make_unique<ambar::NumberNode>($1);
+          $$ = numNode.release();
+      }
+    | NUM_REAL       { 
+          auto numNode = std::make_unique<ambar::NumberNode>($1);
+          $$ = numNode.release();
+      }
+    | IDENTIFIER     { 
+          auto idNode = std::make_unique<ambar::IdentifierNode>($1);
+          free($1);
+          $$ = idNode.release();
+      }
+    | STRING         { 
+          auto strNode = std::make_unique<ambar::StringNode>(*$1);
+          delete $1;
+          $$ = strNode.release();
+      }
+    | BOOL_TRUE      { 
+          auto boolNode = std::make_unique<ambar::BoolNode>(true);
+          $$ = boolNode.release();
+      }
+    | BOOL_FALSE     { 
+          auto boolNode = std::make_unique<ambar::BoolNode>(false);
+          $$ = boolNode.release();
+      }
+    | func_call      { $$ = $1; }
+    | LPAREN expr RPAREN { $$ = $2; }
+;
+
+func_call: 
+    IDENTIFIER LPAREN opt_args RPAREN { 
+        std::vector<std::unique_ptr<ambar::ASTNode>> args;
+        if ($3) {
+            for (auto* arg : *$3) {
+                if (arg) {
+                    args.push_back(std::unique_ptr<ambar::ASTNode>(arg));
+                }
+            }
+            delete $3;
         }
-        $$ = $1;
-    }
-;
-
-expr:
-    logic_expr {
-        $$ = $1;
-    }
-;
-
-logic_expr:
-    rel_expr {
-        $$ = $1;
-    }
-    | logic_expr AND rel_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("&&", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | logic_expr OR rel_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("||", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | NOT rel_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<UnaryNode>("!", std::move(*$2)));
-        delete $2;
-    }
-;
-
-rel_expr:
-    arith_expr {
-        $$ = $1;
-    }
-    | arith_expr EQ arith_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("==", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | arith_expr NEQ arith_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("!=", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | arith_expr LT arith_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("<", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | arith_expr LE arith_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("<=", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | arith_expr GT arith_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>(">", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | arith_expr GE arith_expr {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>(">=", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-;
-
-arith_expr:
-    term {
-        $$ = $1;
-    }
-    | arith_expr ADD term {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("+", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | arith_expr SUB term {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("-", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-;
-
-term:
-    factor {
-        $$ = $1;
-    }
-    | term MUL factor {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("*", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | term DIV factor {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("/", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-    | term MOD factor {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BinaryNode>("%", std::move(*$1), std::move(*$3)));
-        delete $1;
-        delete $3;
-    }
-;
-
-factor:
-    NUM_INT {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<NumberNode>($1));
-    }
-    | NUM_REAL {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<NumberNode>($1));
-    }
-    | IDENTIFIER {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<IdentifierNode>(*$1));
-        delete $1;
-    }
-    | BOOL_TRUE {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BoolNode>(true));
-    }
-    | BOOL_FALSE {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<BoolNode>(false));
-    }
-    | LPAREN expr RPAREN {
-        $$ = $2;
-    }
-    | ADD factor %prec UNARY {
-        $$ = $2;
-    }
-    | SUB factor %prec UNARY {
-        $$ = new std::unique_ptr<ASTNode>(
-            std::make_unique<UnaryNode>("-", std::move(*$2)));
-        delete $2;
+        auto callNode = std::make_unique<ambar::CallNode>(std::string($1), std::move(args));
+        free($1);
+        $$ = callNode.release();
     }
 ;
 
 %%
+
+void yyerror(const char* s) {
+    fprintf(stderr, "Parse error at line %d: %s\n", yylineno, s);
+}
+
+void cleanup() {
+    // A limpeza é feita automaticamente pelos unique_ptr
+}
