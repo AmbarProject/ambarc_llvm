@@ -57,7 +57,7 @@ Type your code below:
         }
         std::cout << "Compilando: " << inputFile << std::endl;
     } else {
-        std::cout << "Digite seu código Ambar (Ctrl+D para finalizar):" << std::endl;
+        std::cout << "Digite seu código Ambar (Ctrl+D para finalizar):\n\n" << std::endl;
         yyin = stdin;
     }
 

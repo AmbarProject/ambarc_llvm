@@ -96,7 +96,7 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     
     verifyFunction(*mainFunc);
     currentFunction = nullptr;
-
+}
 
 Value* LLVMGenerator::generateBlock(BlockNode* node) {
     // Salvar o estado atual das tabelas de símbolos

@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_SRC_PARSER_PARSER_TAB_HH_INCLUDED
-# define YY_YY_SRC_PARSER_PARSER_TAB_HH_INCLUDED
+#ifndef YY_YY_PARSER_TAB_HH_INCLUDED
+# define YY_YY_PARSER_TAB_HH_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -45,7 +45,7 @@
 extern int yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 1 "src/parser/parser.y"
+#line 1 "parser.y"
 
 #include <cstdio>
 #include <memory>
@@ -74,7 +74,7 @@ extern int yydebug;
 #include "../ast/nodes/declarations/ProgramNode.hpp"
 #include "../ast/nodes/declarations/VarNode.hpp"
 
-#line 78 "src/parser/parser.tab.hh"
+#line 78 "parser.tab.hh"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -128,7 +128,8 @@ extern int yydebug;
     LPAREN = 298,                  /* LPAREN  */
     RPAREN = 299,                  /* RPAREN  */
     LBRACE = 300,                  /* LBRACE  */
-    RBRACE = 301                   /* RBRACE  */
+    RBRACE = 301,                  /* RBRACE  */
+    UMINUS = 302                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -137,7 +138,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 52 "src/parser/parser.y"
+#line 52 "parser.y"
 
     int num;
     float real;
@@ -148,7 +149,7 @@ union YYSTYPE
     std::vector<ambar::ASTNode*>* stmts;
     std::vector<std::pair<std::string, std::string>>* params;
 
-#line 152 "src/parser/parser.tab.hh"
+#line 153 "parser.tab.hh"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -163,4 +164,4 @@ extern YYSTYPE yylval;
 int yyparse (void);
 
 
-#endif /* !YY_YY_SRC_PARSER_PARSER_TAB_HH_INCLUDED  */
+#endif /* !YY_YY_PARSER_TAB_HH_INCLUDED  */

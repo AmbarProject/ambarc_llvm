@@ -21,7 +21,7 @@ private:
 
 // Implementação inline para remover a necessidade do .cpp
 inline StringNode::StringNode(const std::string& value)
-    : ASTNode(ASTNode::NodeType::StringNode), value_(value) {}
+    : ASTNode(ASTNode::NodeType::StringNode, {}), value_(value) {}
 
 inline const std::string& StringNode::getValue() const {
     return value_;

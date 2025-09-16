@@ -1,20 +1,26 @@
+%option noyywrap
+
 %{
 #include "../parser/parser.tab.hh"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 extern "C" {
     int yylex();
 }
 
-void yyerror(const char* s);
+
+void yyerror(const char *s);
 %}
 
-DIGIT    [0-9]
-LETTER   [a-zA-Z_]
-ID       {LETTER}({LETTER}|{DIGIT})*
-WS       [ \t\r\n]
+DIGIT      [0-9]
+LETTER     [a-zA-Z_]
+NUM_INT    [0-9]+
+NUM_REAL   [0-9]+\.[0-9]+
+ID         [a-zA-Z_][a-zA-Z0-9_]*
+WS         [ \t\r\n]+
 
 %%
 
@@ -31,6 +37,7 @@ WS       [ \t\r\n]
 "int"           { return INT; }
 "float"         { return FLOAT; }
 "bool"          { return BOOL; }
+"string"        { return STRING_T; }
 "void"          { return VOID; }
 
 "true"          { return BOOL_TRUE; }
@@ -49,39 +56,33 @@ WS       [ \t\r\n]
 "*"             { return MUL; }
 "/"             { return DIV; }
 "="             { return ASSIGN; }
+"->"            { return ARROW; }
 
 ";"             { return SEMI; }
 ":"             { return COLON; }
 ","             { return COMMA; }
+"."             { return DOT; }
 "("             { return LPAREN; }
 ")"             { return RPAREN; }
 "{"             { return LBRACE; }
 "}"             { return RBRACE; }
 
-[0-9]+\.[0-9]+  { 
-    yylval.real = atof(yytext);  // CORREÇÃO: usar 'real' em vez de 'real_val'
-    return NUM_REAL; 
+\"([^\"\\]|\\.)*\"  {
+    std::string raw(yytext);
+    std::string cleaned = raw.substr(1, raw.size() - 2);
+    yylval.str = new std::string(cleaned);
+    return STRING;
 }
 
-[0-9]+          { 
-    yylval.num = atoi(yytext);   // CORREÇÃO: usar 'num' em vez de 'int_val'
-    return NUM_INT; 
-}
+{NUM_REAL}       { yylval.real = atof(yytext); return NUM_REAL; }
+{NUM_INT}        { yylval.num = atoi(yytext); return NUM_INT; }
+{ID}             { yylval.id = strdup(yytext); return IDENTIFIER; }
 
-[a-zA-Z_][a-zA-Z0-9_]* { 
-    yylval.id = strdup(yytext);  // CORREÇÃO: usar 'id' em vez de 'str_val'
-    return IDENTIFIER; 
-}
+"//".*           { }
+"/*"([^*]|\*+[^*/])*"*/" { }
+{WS}             { }
 
-[ \t\n\r]       { /* skip whitespace */ }
-
-.               { 
-    std::cerr << "Unexpected character: " << yytext << std::endl;
-    return YYUNDEF;
-}
+.                { std::cerr << "Unexpected character: " << yytext << std::endl; }
 
 %%
 
-int yywrap() { 
-    return 1; 
-}
