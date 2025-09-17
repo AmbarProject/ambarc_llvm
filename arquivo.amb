@@ -1,1 +1,41 @@
-int main() -> {}
+import math -> std;
+
+x: int = 10;
+y: float = 3.14;
+z: bool;
+msg: string = "Hello World";
+
+func hello() -> void {
+    msg = "Hello from function!";
+}
+
+// Problema na declaração de argumentos
+func sum() -> int {
+  return 1;
+}
+
+// Está criando 2 main quando eu inicio por aqui
+func main() -> int {
+  if (x < 20) {
+      x = x + 1;
+  } else {
+      x = x - 1;
+  }
+
+  while (x < 15) {
+    x = x + 2;
+    if (x == 13) {
+        continue;
+    }
+  }
+
+  // Erro sintático no For
+  // for (i: int = 0; i < 5; i = i + 1) {}
+
+  // Erro sintático no Call
+  // sum_result: int = sum(5, 7);
+  
+  // Unary operations não funcionando - sintática
+  // neg: int = -10;
+  //notVal: bool != false;
+}
