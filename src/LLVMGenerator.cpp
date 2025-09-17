@@ -39,15 +39,19 @@ void LLVMGenerator::generate(std::unique_ptr<ASTNode>& astRoot) {
         // Processa variáveis globais primeiro
         handleGlobalVariables(programNode);
         
-        // Gera TODAS as funções antes do main
+        // Gera todas as funções EXCETO main
         for (const auto& decl : programNode->getDeclarations()) {
             if (auto funcNode = dynamic_cast<FunctionNode*>(decl.get())) {
-                generateFunction(funcNode);
+                if (funcNode->getName() != "main") {
+                    generateFunction(funcNode);
+                }
             }
         }
         
-        // Gera a função main por último
-        generateMainFunction(astRoot);
+        // Gera a função main apenas se não existir ainda
+        if (!module->getFunction("main")) {
+            generateMainFunction(astRoot);
+        }
     }
 }
 
