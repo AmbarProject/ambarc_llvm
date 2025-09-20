@@ -39,17 +39,25 @@ void LLVMGenerator::generate(std::unique_ptr<ASTNode>& astRoot) {
         // Processa variáveis globais primeiro
         handleGlobalVariables(programNode);
         
-        // Gera todas as funções EXCETO main
+        // Verificar se existe função main explícita
+        bool hasExplicitMain = false;
         for (const auto& decl : programNode->getDeclarations()) {
             if (auto funcNode = dynamic_cast<FunctionNode*>(decl.get())) {
-                if (funcNode->getName() != "main") {
-                    generateFunction(funcNode);
+                if (funcNode->getName() == "main") {
+                    hasExplicitMain = true;
                 }
             }
         }
         
-        // Gera a função main apenas se não existir ainda
-        if (!module->getFunction("main")) {
+        // Gera todas as funções
+        for (const auto& decl : programNode->getDeclarations()) {
+            if (auto funcNode = dynamic_cast<FunctionNode*>(decl.get())) {
+                generateFunction(funcNode);
+            }
+        }
+        
+        // Se não há função main explícita, gerar main implícita
+        if (!hasExplicitMain) {
             generateMainFunction(astRoot);
         }
     }
@@ -73,22 +81,40 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     builder->SetInsertPoint(bb);
     
     if (auto programNode = dynamic_cast<ProgramNode*>(astRoot.get())) {
-        // Primeiro: processar variáveis globais (se houver)
+        // Primeiro: verificar se existe uma função main explícita
+        bool hasExplicitMain = false;
         for (const auto& decl : programNode->getDeclarations()) {
-            if (auto varNode = dynamic_cast<VarNode*>(decl.get())) {
-                // Variável global - já foi processada em handleGlobalVariables
-                // Mas precisamos garantir que existe e pode ser usada
-                if (globalValues.count(varNode->getName())) {
-                    // Variável global existe, pode ser usada
+            if (auto funcNode = dynamic_cast<FunctionNode*>(decl.get())) {
+                if (funcNode->getName() == "main") {
+                    hasExplicitMain = true;
+                    break;
                 }
             }
         }
         
-        // Segundo: processar o código do programa principal
+        // Se há função main explícita, não gerar main implícita
+        if (hasExplicitMain) {
+            mainFunc->eraseFromParent();
+            currentFunction = nullptr;
+            return;
+        }
+        
+        // Processar todos os statements que não são funções ou variáveis globais
         for (const auto& decl : programNode->getDeclarations()) {
-            if (auto blockNode = dynamic_cast<BlockNode*>(decl.get())) {
-                generateBlock(blockNode);
+            // Pular funções e variáveis (já foram processadas)
+            if (dynamic_cast<FunctionNode*>(decl.get()) || 
+                dynamic_cast<VarNode*>(decl.get())) {
+                continue;
             }
+            
+            // Verificar se o bloco atual ainda é válido
+            BasicBlock* currentBB = builder->GetInsertBlock();
+            if (currentBB->getTerminator()) {
+                break; // Parar se já há um terminador
+            }
+            
+            // Processar outros tipos de nós (statements, blocos, etc.)
+            generateExpr(decl.get());
         }
     }
     
@@ -808,33 +834,35 @@ void LLVMGenerator::pushLoopBlocks(BasicBlock* breakBlock, BasicBlock* continueB
 }
 
 Value* LLVMGenerator::generateFor(ForNode* node) {
-    // Salvar o estado atual das tabelas de símbolos para o escopo do loop
+    // Salvar o estado atual das tabelas de símbolos
     std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
     std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
     
+    Function* function = builder->GetInsertBlock()->getParent();
+    
     // Criar blocos básicos para o loop
     BasicBlock* preheaderBB = builder->GetInsertBlock();
-    BasicBlock* loopBB = BasicBlock::Create(*context, "loop", currentFunction);
-    BasicBlock* bodyBB = BasicBlock::Create(*context, "body", currentFunction);
-    BasicBlock* updateBB = BasicBlock::Create(*context, "update", currentFunction);
-    BasicBlock* afterLoopBB = BasicBlock::Create(*context, "afterloop", currentFunction);
+    BasicBlock* condBB = BasicBlock::Create(*context, "for.cond", function);
+    BasicBlock* bodyBB = BasicBlock::Create(*context, "for.body", function);
+    BasicBlock* updateBB = BasicBlock::Create(*context, "for.update", function);
+    BasicBlock* afterBB = BasicBlock::Create(*context, "for.end", function);
     
-    // Gerar a expressão de inicialização (se existir)
+    // Gerar a inicialização (se existir)
     if (node->getInit()) {
         generateExpr(node->getInit());
     }
     
-    // Saltar para o bloco do loop
-    builder->CreateBr(loopBB);
+    // Saltar para o bloco de condição
+    builder->CreateBr(condBB);
     
-    // Bloco do loop: verificar condição
-    builder->SetInsertPoint(loopBB);
+    // Bloco de condição
+    builder->SetInsertPoint(condBB);
     
     Value* condValue = nullptr;
     if (node->getCond()) {
         condValue = generateExpr(node->getCond());
         if (!condValue) {
-            llvm::errs() << "Erro: Condição do loop for inválida\n";
+            llvm::errs() << "Erro: Condição do for inválida\n";
             return nullptr;
         }
         
@@ -843,24 +871,24 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
             condValue = builder->CreateICmpNE(
                 condValue, 
                 ConstantInt::get(condValue->getType(), 0), 
-                "loopcond");
+                "forcond");
         }
     } else {
-        // Se não há condição, loop infinito (condição sempre verdadeira)
+        // Se não há condição, loop infinito
         condValue = ConstantInt::get(Type::getInt1Ty(*context), 1);
     }
     
-    builder->CreateCondBr(condValue, bodyBB, afterLoopBB);
+    builder->CreateCondBr(condValue, bodyBB, afterBB);
     
     // Bloco do corpo
     builder->SetInsertPoint(bodyBB);
     
     // Empilhar blocos de break/continue
-    pushLoopBlocks(afterLoopBB, updateBB);
+    pushLoopBlocks(afterBB, updateBB);
     
     // Gerar o corpo do loop
     if (node->getBody()) {
-        generateBlock(node->getBody());
+        generateExpr(node->getBody());
     }
     
     // Desempilhar blocos de break/continue
@@ -878,16 +906,16 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
     }
     
     // Voltar para verificar a condição
-    builder->CreateBr(loopBB);
+    builder->CreateBr(condBB);
     
     // Bloco após o loop
-    builder->SetInsertPoint(afterLoopBB);
+    builder->SetInsertPoint(afterBB);
     
-    // Restaurar tabelas de símbolos (escopo do loop termina)
+    // Restaurar tabelas de símbolos
     namedValues = oldNamedValues;
     variableTypes = oldVariableTypes;
     
-    return ConstantInt::get(*context, APInt(32, 0)); // Retorno dummy
+    return ConstantInt::get(*context, APInt(32, 0));
 }
 
 void LLVMGenerator::popLoopBlocks() {
@@ -1137,9 +1165,10 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
 
     std::vector<Type*> paramTypes;
     for (const auto& param : node->getParams()) {
-        Type* paramType = getLLVMType(param.first);
+        // CORREÇÃO: param.first é o tipo, param.second é o nome
+        Type* paramType = getLLVMType(param.first); // param.first = tipo
         if (!paramType) {
-            llvm::errs() << "Erro: Tipo de parâmetro desconhecido\n";
+            llvm::errs() << "Erro: Tipo de parâmetro desconhecido: " << param.first << "\n";
             namedValues = std::move(oldNamedValues);
             variableTypes = std::move(oldVariableTypes);
             return;
@@ -1149,7 +1178,7 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     
     Type* returnType = getLLVMType(node->getReturnType());
     if (!returnType) {
-        llvm::errs() << "Erro: Tipo de retorno desconhecido\n";
+        llvm::errs() << "Erro: Tipo de retorno desconhecido: " << node->getReturnType() << "\n";
         namedValues = std::move(oldNamedValues);
         variableTypes = std::move(oldVariableTypes);
         return;
@@ -1167,20 +1196,25 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     BasicBlock* bb = BasicBlock::Create(*context, "entry", func);
     builder->SetInsertPoint(bb);
     
+    // CORREÇÃO: Processar os parâmetros da função corretamente
     unsigned idx = 0;
     for (auto& arg : func->args()) {
-        const auto& paramName = node->getParams()[idx].second;
+        const auto& param = node->getParams()[idx];
+        const std::string& paramName = param.second; // param.second = nome
+        const std::string& paramTypeStr = param.first; // param.first = tipo
+        
         arg.setName(paramName);
         
+        Type* paramType = getLLVMType(paramTypeStr);
         AllocaInst* alloca = builder->CreateAlloca(
-            paramTypes[idx],
+            paramType,
             nullptr,
-            paramName + ".addr"
+            paramName
         );
         
         builder->CreateStore(&arg, alloca);
         namedValues[paramName] = alloca;
-        variableTypes[paramName] = paramTypes[idx];
+        variableTypes[paramName] = paramType;
         idx++;
     }
     
@@ -1236,6 +1270,7 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     namedValues = std::move(oldNamedValues);
     variableTypes = std::move(oldVariableTypes);
 }
+
 
 Type* LLVMGenerator::getLLVMType(const std::string& typeName) {
     if (typeName == "int") return Type::getInt32Ty(*context);

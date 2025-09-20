@@ -62,7 +62,7 @@ std::unique_ptr<ambar::ASTNode> ambar::astRoot = nullptr;
 }
 
 %type <node> program decl_list decl var_decl stmt assign_stmt call_stmt 
-             return_stmt if_stmt while_stmt for_stmt break_stmt continue_stmt 
+             return_stmt if_stmt while_stmt for_stmt for_init opt_expr break_stmt continue_stmt 
              block expr logic_expr rel_expr arith_expr term factor func_call
              func_decl import_decl
 
@@ -183,17 +183,16 @@ opt_params:
 params: 
       IDENTIFIER COLON type {
           $$ = new std::vector<std::pair<std::string, std::string>>();
-          $$->push_back({std::string($1), *$3});
+          $$->push_back({*$3, std::string($1)}); // CORREÇÃO: tipo, nome
           delete $3; 
           free($1);
       }
     | params COMMA IDENTIFIER COLON type {
-          $1->push_back({std::string($3), *$5});
+          $1->push_back({*$5, std::string($3)}); // CORREÇÃO: tipo, nome
           delete $5; 
           free($3);
           $$ = $1;
       }
-;
 
 type:
     INT       { $$ = new std::string("int"); }
@@ -216,7 +215,8 @@ stmt:
 ;
 
 assign_stmt: 
-    IDENTIFIER ASSIGN expr SEMI { 
+    IDENTIFIER ASSIGN expr SEMI {
+        printf("Passou? \n");
         auto assign = std::make_unique<ambar::AssignNode>(std::string($1), std::unique_ptr<ambar::ASTNode>($3));
         free($1);
         $$ = assign.release();
@@ -266,13 +266,24 @@ while_stmt:
     }
 ;
 
+for_init:
+      assign_stmt { $$ = $1; }
+    | var_decl    { $$ = $1; }
+    | expr        { $$ = $1; }
+;
+
+opt_expr:
+      /* empty */ { $$ = nullptr; }
+    | expr { $$ = $1; }
+;
+
+// E modificar for_stmt:
 for_stmt: 
-    FOR LPAREN assign_stmt expr SEMI assign_stmt RPAREN stmt {
+    FOR LPAREN for_init opt_expr SEMI opt_expr RPAREN block {
         auto forNode = std::make_unique<ambar::ForNode>(
             std::unique_ptr<ambar::ASTNode>($3),
             std::unique_ptr<ambar::ASTNode>($4),
             std::unique_ptr<ambar::ASTNode>($6),
-            /* $8 é stmt, esperamos um BlockNode — se não for, tenta converter */
             std::unique_ptr<ambar::BlockNode>(dynamic_cast<ambar::BlockNode*>($8))
         );
         $$ = forNode.release();
@@ -334,7 +345,7 @@ args:
 ;
 
 expr: 
-    logic_expr { $$ = $1; }
+    logic_expr { printf("DEBUG: EXPR CREATED\n "); $$ = $1; }
 ;
 
 logic_expr: 
