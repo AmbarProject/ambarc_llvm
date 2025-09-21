@@ -522,7 +522,7 @@ Value* LLVMGenerator::generateVariable(VarNode* node) {
 
 Value* LLVMGenerator::generateNumber(NumberNode* node) {
     if (node->isFloatingPoint()) {
-        return ConstantFP::get(*context, APFloat(node->getFloatValue()));
+        return ConstantFP::get(Type::getFloatTy(*context), APFloat(static_cast<float>(node->getFloatValue())));
     } else {
         return ConstantInt::get(*context, APInt(32, node->getIntValue()));
     }
@@ -847,7 +847,7 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
     BasicBlock* updateBB = BasicBlock::Create(*context, "for.update", function);
     BasicBlock* afterBB = BasicBlock::Create(*context, "for.end", function);
     
-    // Gerar a inicialização (se existir)
+    // Gerar a inicialização (se existir) - NOVO ESCOPO
     if (node->getInit()) {
         generateExpr(node->getInit());
     }
@@ -886,7 +886,7 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
     // Empilhar blocos de break/continue
     pushLoopBlocks(afterBB, updateBB);
     
-    // Gerar o corpo do loop
+    // Gerar o corpo do loop - MESMO ESCOPO!
     if (node->getBody()) {
         generateExpr(node->getBody());
     }
@@ -900,7 +900,7 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
     // Bloco de atualização
     builder->SetInsertPoint(updateBB);
     
-    // Gerar expressão de atualização (se existir)
+    // Gerar expressão de atualização (se existir) - MESMO ESCOPO!
     if (node->getUpdate()) {
         generateExpr(node->getUpdate());
     }
@@ -910,10 +910,6 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
     
     // Bloco após o loop
     builder->SetInsertPoint(afterBB);
-    
-    // Restaurar tabelas de símbolos
-    namedValues = oldNamedValues;
-    variableTypes = oldVariableTypes;
     
     return ConstantInt::get(*context, APInt(32, 0));
 }
@@ -1058,6 +1054,23 @@ Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
     
     if (!L || !R) return nullptr;
 
+    if (L->getType() != R->getType()) {
+        // Conversões necessárias
+        if (L->getType()->isIntegerTy(32) && R->getType()->isIntegerTy(1)) {
+            R = builder->CreateZExt(R, Type::getInt32Ty(*context), "zexttmp");
+        } else if (L->getType()->isIntegerTy(1) && R->getType()->isIntegerTy(32)) {
+            L = builder->CreateZExt(L, Type::getInt32Ty(*context), "zexttmp");
+        } else if (L->getType()->isFloatTy() && R->getType()->isIntegerTy(32)) {
+            R = builder->CreateSIToFP(R, Type::getFloatTy(*context), "sitofptmp");
+        } else if (L->getType()->isIntegerTy(32) && R->getType()->isFloatTy()) {
+            L = builder->CreateSIToFP(L, Type::getFloatTy(*context), "sitofptmp");
+        } else {
+            llvm::errs() << "Erro: Tipos incompatíveis na operação binária: " 
+                        << *L->getType() << " vs " << *R->getType() << "\n";
+            return nullptr;
+        }
+    }
+
     Type* type = L->getType();
     const std::string& op = node->getOp();
     
@@ -1137,13 +1150,17 @@ Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
 
 Value* LLVMGenerator::generateIdentifier(IdentifierNode* node) {
     if (namedValues.count(node->getName())) {
-        Value* val = namedValues[node->getName()];
-        return builder->CreateLoad(variableTypes[node->getName()], val);
+        Value* ptr = namedValues[node->getName()];
+        // Verificar se já é um valor ou ainda é um ponteiro
+        if (ptr->getType()->isPointerTy()) {
+            return builder->CreateLoad(variableTypes[node->getName()], ptr, node->getName() + ".load");
+        }
+        return ptr;
     }
     
     if (globalValues.count(node->getName())) {
         GlobalVariable* gvar = globalValues[node->getName()];
-        return builder->CreateLoad(globalTypes[node->getName()], gvar);
+        return builder->CreateLoad(globalTypes[node->getName()], gvar, node->getName() + ".load");
     }
     
     llvm::errs() << "Erro: Variável '" << node->getName() << "' não declarada\n";

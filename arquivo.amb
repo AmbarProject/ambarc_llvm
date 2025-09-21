@@ -1,23 +1,11 @@
-fib_result: int;
-
 func main() -> int {
-    n: int = 1000;
+  iterations: int = 100000000;
+  pi: float = 0.0;
+  sign: float = 1.0;
+  
+  for(i: int =0; i < iterations; i = i + 1) {
+    pi = pi + sign / (2.9 * i + 1.0);
+    sign = -sign;
 
-    a: int = 0;
-    b: int = 1;
-    temp: int;
-
-    if (n == 0) {
-        fib_result = a;
-    } else {
-        for (i:int = 2; i <= n; i = i + 1) {
-            temp = a + b;
-            a = b;
-            b = temp;
-        }
-        fib_result = b;
-    }
-
-    return 0;
+  }
 }
-
