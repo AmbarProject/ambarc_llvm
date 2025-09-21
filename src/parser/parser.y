@@ -62,7 +62,7 @@ std::unique_ptr<ambar::ASTNode> ambar::astRoot = nullptr;
 }
 
 %type <node> program decl_list decl var_decl stmt assign_stmt call_stmt 
-             return_stmt if_stmt while_stmt for_stmt for_init opt_expr break_stmt continue_stmt 
+             return_stmt if_stmt while_stmt for_stmt for_init for_var_decl for_assign_stmt opt_expr break_stmt continue_stmt 
              block expr logic_expr rel_expr arith_expr term factor func_call
              func_decl import_decl
 
@@ -129,7 +129,6 @@ decl_list:
 
 decl: 
       import_decl         { $$ = nullptr; }
-    | var_decl            { $$ = $1; }
     | func_decl           { $$ = $1; }
     | stmt                { $$ = $1; }
 ;
@@ -212,6 +211,7 @@ stmt:
     | break_stmt       { $$ = $1; }
     | continue_stmt    { $$ = $1; }
     | block            { $$ = $1; }
+    | var_decl         { $$ = $1; }
 ;
 
 assign_stmt: 
@@ -266,25 +266,53 @@ while_stmt:
     }
 ;
 
-for_init:
-      assign_stmt { $$ = $1; }
-    | var_decl    { $$ = $1; }
-    | expr        { $$ = $1; }
+for_var_decl:
+      IDENTIFIER COLON type ASSIGN expr {
+          auto var = std::make_unique<ambar::VarNode>(std::string($1), *$3, std::unique_ptr<ambar::ASTNode>($5));
+          delete $3;
+          free($1);
+          $$ = var.release();
+      }
+    | IDENTIFIER COLON type {
+          auto var = std::make_unique<ambar::VarNode>(std::string($1), *$3, nullptr);
+          delete $3;
+          free($1);
+          $$ = var.release();
+      }
 ;
+
+for_assign_stmt: 
+    IDENTIFIER ASSIGN expr {
+        auto assign = std::make_unique<ambar::AssignNode>(
+            std::string($1), 
+            std::unique_ptr<ambar::ASTNode>($3)
+        );
+        free($1);
+        $$ = assign.release();
+    }
+;
+
+
+for_init:
+      for_var_decl { printf("DEBUG: FOR VAR DECL USADE\n"); $$ = $1; }
+    | for_assign_stmt  { printf("DEBUG: ASSIGN STMT USADE\n"); $$ = $1; }
+    | expr         { printf("DEBUG: EXPR USADE\n"); $$ = $1; }
+    | /* empty */  { $$ = nullptr; }
+;
+
 
 opt_expr:
       /* empty */ { $$ = nullptr; }
-    | expr { $$ = $1; }
+    | expr        { $$ = $1; }
 ;
 
-// E modificar for_stmt:
 for_stmt: 
-    FOR LPAREN for_init opt_expr SEMI opt_expr RPAREN block {
+    FOR LPAREN for_init SEMI opt_expr SEMI for_init RPAREN block {
         auto forNode = std::make_unique<ambar::ForNode>(
             std::unique_ptr<ambar::ASTNode>($3),
-            std::unique_ptr<ambar::ASTNode>($4),
-            std::unique_ptr<ambar::ASTNode>($6),
-            std::unique_ptr<ambar::BlockNode>(dynamic_cast<ambar::BlockNode*>($8))
+            std::unique_ptr<ambar::ASTNode>($5),
+            std::unique_ptr<ambar::ASTNode>($7),
+            std::unique_ptr<ambar::BlockNode>(dynamic_cast<ambar::BlockNode*>($9))
         );
         $$ = forNode.release();
     }

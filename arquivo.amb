@@ -1,4 +1,4 @@
-/* import math -> std;
+import math -> std;
 
 x: int = 10;
 y: float = 3.14;
@@ -10,13 +10,18 @@ func hello() -> void {
 }
 
 // Problema na declaração de argumentos
-func sum(a:int) -> int {
+func sum(a:int, b:int) -> int {
   return 1;
 }
 
-for (i:int = 0; i < 5; i = i + 1) {}
-
 func main() -> int {
+
+  
+  k: int = 10;
+  sum_result: int = sum(5, 7);
+
+
+
   if (x < 20) {
       x = x + 1;
   } else {
@@ -28,15 +33,10 @@ func main() -> int {
     if (x == 13) {
         continue;
     }
-  } */
-  
-  // Erro sintático no For
-  //for (i:int = 0; i < 5; i = i + 1) {}
-  
-  // Erro sintático no Call
-  // sum_result: int = sum(5, 7);
-  
-  // Unary operations não funcionando - sintática
-  // neg: int = -10;
-  //notVal: bool != false;
-//}
+  }
+
+  for (i:int = 0; i < 5; i = i + 1) {}
+ 
+  neg: int = -10;
+  // notVal: bool != false;
+}
