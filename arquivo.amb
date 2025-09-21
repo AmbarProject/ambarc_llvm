@@ -1,42 +1,23 @@
-import math -> std;
-
-x: int = 10;
-y: float = 3.14;
-z: bool;
-msg: string = "Hello World";
-
-func hello() -> void {
-    msg = "Hello from function!";
-}
-
-// Problema na declaração de argumentos
-func sum(a:int, b:int) -> int {
-  return 1;
-}
+fib_result: int;
 
 func main() -> int {
+    n: int = 1000;
 
-  
-  k: int = 10;
-  sum_result: int = sum(5, 7);
+    a: int = 0;
+    b: int = 1;
+    temp: int;
 
-
-
-  if (x < 20) {
-      x = x + 1;
-  } else {
-      x = x - 1;
-  }
-
-  while (x < 15) {
-    x = x + 2;
-    if (x == 13) {
-        continue;
+    if (n == 0) {
+        fib_result = a;
+    } else {
+        for (i:int = 2; i <= n; i = i + 1) {
+            temp = a + b;
+            a = b;
+            b = temp;
+        }
+        fib_result = b;
     }
-  }
 
-  for (i:int = 0; i < 5; i = i + 1) {}
- 
-  neg: int = -10;
-  // notVal: bool != false;
+    return 0;
 }
+
