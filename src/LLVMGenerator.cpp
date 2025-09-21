@@ -1271,12 +1271,11 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     variableTypes = std::move(oldVariableTypes);
 }
 
-
 Type* LLVMGenerator::getLLVMType(const std::string& typeName) {
     if (typeName == "int") return Type::getInt32Ty(*context);
     if (typeName == "float") return Type::getFloatTy(*context);
     if (typeName == "bool") return Type::getInt1Ty(*context);
-    if (typeName == "string") return Type::getInt8PtrTy(*context);
+    if (typeName == "string") return PointerType::get(Type::getInt8Ty(*context), 0);
     return Type::getVoidTy(*context);
 }
 

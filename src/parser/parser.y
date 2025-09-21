@@ -216,7 +216,6 @@ stmt:
 
 assign_stmt: 
     IDENTIFIER ASSIGN expr SEMI {
-        printf("Passou? \n");
         auto assign = std::make_unique<ambar::AssignNode>(std::string($1), std::unique_ptr<ambar::ASTNode>($3));
         free($1);
         $$ = assign.release();
@@ -294,9 +293,9 @@ for_assign_stmt:
 
 
 for_init:
-      for_var_decl { printf("DEBUG: FOR VAR DECL USADE\n"); $$ = $1; }
-    | for_assign_stmt  { printf("DEBUG: ASSIGN STMT USADE\n"); $$ = $1; }
-    | expr         { printf("DEBUG: EXPR USADE\n"); $$ = $1; }
+      for_var_decl { $$ = $1; }
+    | for_assign_stmt  { $$ = $1; }
+    | expr         { $$ = $1; }
     | /* empty */  { $$ = nullptr; }
 ;
 
@@ -373,7 +372,7 @@ args:
 ;
 
 expr: 
-    logic_expr { printf("DEBUG: EXPR CREATED\n "); $$ = $1; }
+    logic_expr { $$ = $1; }
 ;
 
 logic_expr: 

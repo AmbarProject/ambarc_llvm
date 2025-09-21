@@ -1,48 +1,52 @@
 #!/bin/bash
 
-echo "Compilando Ambar Compiler..."
-
-# Gerar parser
-echo "Gerando parser..."
-cd src/parser
-bison -d -o parser.tab.cc parser.y
-if [ $? -ne 0 ]; then
-  echo "❌ Erro ao gerar parser"
-  exit 1
-fi
-cd ../..
-
-# Gerar lexer
-echo "Gerando lexer..."
-flex -o src/lexer/lex.yy.c src/lexer/lexer.l
-if [ $? -ne 0 ]; then
-  echo "❌ Erro ao gerar lexer"
+# Verificar se foi passado um argumento
+if [ $# -eq 0 ]; then
+  echo "Erro: Por favor, informe o nome do arquivo .amb"
+  echo "Uso: $0 <arquivo.amb>"
   exit 1
 fi
 
-# Compilar
-echo "Compilando..."
-g++ -std=c++17 -Wall -Wextra -g -Isrc \
-  -c src/parser/parser.tab.cc \
-  -c src/lexer/lex.yy.c \
-  -c src/LLVMGenerator.cpp \
-  -c src/main.cpp \
-  $(llvm-config --cxxflags) -fexceptions
-
-if [ $? -ne 0 ]; then
-  echo "❌ Erro na compilação"
+# Verificar se o arquivo existe
+if [ ! -f "$1" ]; then
+  echo "Erro: Arquivo '$1' não encontrado"
   exit 1
 fi
 
-# Linkar
-echo "Linkando..."
-g++ -o ambar \
-  parser.tab.o lex.yy.o LLVMGenerator.o main.o \
-  $(llvm-config --ldflags --system-libs --libs core)
+# Verificar se é um arquivo .amb
+if [[ "$1" != *.amb ]]; then
+  echo "Aviso: O arquivo '$1' não tem extensão .amb"
+fi
 
-if [ $? -eq 0 ]; then
-  echo "✅ Compilação bem-sucedida!"
-else
-  echo "❌ Erro no linking"
+# Extrair o nome do arquivo sem extensão
+filename=$(basename "$1" .amb)
+
+echo "🔨 Processando arquivo: $1"
+
+if [[ ! -f "main.o" || ! -f "lex.yy.o" || ! -f "parser.tab.o" || ! -f "LLVMGenerator.o" ]]; then
+  ./rm.sh
+  ./ir.sh
+fi
+
+# Executar o compilador com o arquivo fornecido
+./ambar "$1"
+
+# Verificar se o arquivo .ll foi gerado
+if [ ! -f "$filename.ll" ]; then
+  echo "Erro: Arquivo '$filename.ll' não foi gerado"
   exit 1
 fi
+
+# Compilar IR para objeto com flags PIE
+llc -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$filename.ll" -o output.o
+
+# Linkar com flags PIE
+gcc -no-pie output.o -o output
+
+# Tornar executável e executar
+chmod +x output
+echo "🚀 Executando programa..."
+./output
+
+# Limpar arquivos temporários (opcional)
+# rm -f output.o "$filename.ll"

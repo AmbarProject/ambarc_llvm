@@ -84,7 +84,8 @@ Type your code below:
                 
                 // Salvar em arquivo se foi passado um arquivo de entrada
                 if (!inputFile.empty()) {
-                    std::string outputFile = inputFile + ".ll";
+                    std::string x = inputFile.erase(inputFile.length() - 4);
+                    std::string outputFile = x + ".ll";
                     std::error_code EC;
                     llvm::raw_fd_ostream dest(outputFile, EC);
                     if (EC) {

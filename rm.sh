@@ -1,13 +1,13 @@
 #!/bin/bash
 
-echo "Deletando arquivos"
-
-rm *.o
+rm -f *.o
 
 cd src/parser
-rm parser.tab.*
+rm -f parser.tab.*
 cd ../..
 
 cd src/lexer
-rm lex.yy.c
-cd ..
+rm -f lex.yy.c
+cd ../..
+
+rm -f output
