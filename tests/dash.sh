@@ -38,6 +38,6 @@ echo "Memória média: $ambar_mem KB"
 # Medir C
 # =========================
 echo "C: "
-read c_time c_mem <<<$(average_time_and_mem "./fibonacci")
+read c_time c_mem <<<$(average_time_and_mem "./pi")
 echo "Tempo médio: $c_time s"
 echo "Memória média: $c_mem KB"
