@@ -1,0 +1,4 @@
+Linguagem,Tempo Médio (s),Memória Média (KB),CPU Média (%)
+Ambar,.230256,1134.36,99.48
+C,.002407,1246.64,81.78
+Rust,.574090,1973.76,99.53

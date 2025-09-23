@@ -14,6 +14,6 @@ int main() {
     
     pi *= 4.0;
     volatile double result = pi; // Prevenir otimização
-    
+ 
     return 0;
 }

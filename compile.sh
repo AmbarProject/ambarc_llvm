@@ -18,18 +18,27 @@ if [[ "$1" != *.amb ]]; then
   echo "Aviso: O arquivo '$1' não tem extensão .amb"
 fi
 
-# Extrair o nome do arquivo sem extensão
+# Extrair diretório e nome do arquivo
+src_dir=$(dirname "$1")
 filename=$(basename "$1" .amb)
 
-echo "🔨 Processando arquivo: $1"
+# Entrar na pasta do arquivo fonte
+cd "$src_dir" || {
+  echo "Erro: Não foi possível entrar no diretório '$src_dir'"
+  exit 1
+}
 
+echo "📂 Diretório atual: $(pwd)"
+echo "🔨 Processando arquivo: $filename.amb"
+
+# Verificar objetos necessários para o compilador
 if [[ ! -f "main.o" || ! -f "lex.yy.o" || ! -f "parser.tab.o" || ! -f "LLVMGenerator.o" ]]; then
-  ./rm.sh
-  ./ir.sh
+  ../rm.sh
+  ../ir.sh
 fi
 
-# Executar o compilador com o arquivo fornecido
-./ambar "$1"
+# Executar o compilador (espera que o binário 'ambar' esteja na pasta pai)
+../ambar "$filename.amb"
 
 # Verificar se o arquivo .ll foi gerado
 if [ ! -f "$filename.ll" ]; then
@@ -38,15 +47,12 @@ if [ ! -f "$filename.ll" ]; then
 fi
 
 # Compilar IR para objeto com flags PIE
-llc -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$filename.ll" -o output.o
+llc -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$filename.ll" -o "$filename.o"
 
 # Linkar com flags PIE
-gcc -no-pie output.o -o output
+gcc -no-pie "$filename.o" -o "$filename"
 
 # Tornar executável e executar
-chmod +x output
+chmod +x "$filename"
 echo "🚀 Executando programa..."
-./output
-
-# Limpar arquivos temporários (opcional)
-# rm -f output.o "$filename.ll"
+./"$filename"
