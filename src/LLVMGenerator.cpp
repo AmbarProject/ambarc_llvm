@@ -135,7 +135,7 @@ Value* LLVMGenerator::generateBlock(BlockNode* node) {
     
     // Processar declarações locais primeiro
     for (const auto& decl : node->getLocalDeclarations()) {
-        generateLocalVariable(decl.get());
+        generateLocalVariable(dynamic_cast<VarNode*>(decl.get()));
     }
     
     // Processar statements
@@ -143,18 +143,25 @@ Value* LLVMGenerator::generateBlock(BlockNode* node) {
     BasicBlock* currentBB = builder->GetInsertBlock();
     
     for (const auto& stmt : node->getStatements()) {
-        // Verificar se o bloco atual já tem um terminador
+        // Verificar se o bloco atual já tem um terminador (return/break/continue)
         if (currentBB->getTerminator()) {
             break; // Não processar mais statements se já temos um terminador
         }
         
         lastValue = generateExpr(stmt.get());
         if (!lastValue) {
-            break;
+            // CORREÇÃO: Continuar mesmo se um statement retornar null
+            // (pode ser um return void, por exemplo)
+            continue;
         }
         
         // Atualizar referência do bloco atual
         currentBB = builder->GetInsertBlock();
+        
+        // CORREÇÃO: Se encontrou um terminador, parar a execução
+        if (currentBB->getTerminator()) {
+            break;
+        }
     }
     
     // Restaurar tabelas de símbolos (escopo local termina)
@@ -712,35 +719,50 @@ Value* LLVMGenerator::generateIf(IfNode* node) {
         builder->CreateCondBr(condValue, thenBB, mergeBB);
     }
     
-    // Gerar bloco then
+    // === CORREÇÃO: Gerar bloco then ===
     builder->SetInsertPoint(thenBB);
     Value* thenValue = generateExpr(node->getThenBlock());
-    thenBB = builder->GetInsertBlock();
+    thenBB = builder->GetInsertBlock(); // Atualizar referência
+    
+    // Verificar se o bloco then terminou com um return/break/continue
+    bool thenHasTerminator = thenBB->getTerminator() != nullptr;
     
     // Só criar branch para merge se o bloco then não terminou
-    if (!thenBB->getTerminator()) {
+    if (!thenHasTerminator) {
         builder->CreateBr(mergeBB);
     }
     
-    // Gerar bloco else se existir
+    // === CORREÇÃO: Gerar bloco else se existir ===
     Value* elseValue = nullptr;
+    bool elseHasTerminator = false;
+    
     if (elseBB) {
         builder->SetInsertPoint(elseBB);
         elseValue = generateExpr(node->getElseBlock());
-        elseBB = builder->GetInsertBlock();
+        elseBB = builder->GetInsertBlock(); // Atualizar referência
+        
+        elseHasTerminator = elseBB->getTerminator() != nullptr;
         
         // Só criar branch para merge se o bloco else não terminou
-        if (!elseBB->getTerminator()) {
+        if (!elseHasTerminator) {
             builder->CreateBr(mergeBB);
         }
     }
     
-    // Só continuar no bloco merge se ele for alcançável
-    bool mergeReachable = (!thenBB->getTerminator() || isa<BranchInst>(thenBB->getTerminator())) &&
-                          (!elseBB || !elseBB->getTerminator() || isa<BranchInst>(elseBB->getTerminator()));
+    // === CORREÇÃO: Só continuar no bloco merge se ele for alcançável ===
+    bool mergeReachable = (!thenHasTerminator || isa<BranchInst>(thenBB->getTerminator())) &&
+                          (!elseBB || !elseHasTerminator || isa<BranchInst>(elseBB->getTerminator()));
     
     if (mergeReachable) {
         builder->SetInsertPoint(mergeBB);
+        // CORREÇÃO: Usar PHI node apenas se ambos os caminhos retornarem valores
+        if (thenValue && elseValue && thenValue->getType() == elseValue->getType() && 
+            !thenHasTerminator && !elseHasTerminator) {
+            PHINode* phi = builder->CreatePHI(thenValue->getType(), 2, "ifresult");
+            phi->addIncoming(thenValue, thenBB);
+            phi->addIncoming(elseValue, elseBB);
+            return phi;
+        }
         return thenValue ? thenValue : elseValue;
     } else {
         // Se o merge não é alcançável, remover e retornar null

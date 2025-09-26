@@ -33,8 +33,8 @@ echo "🔨 Processando arquivo: $filename.amb"
 
 # Verificar objetos necessários para o compilador
 if [[ ! -f "main.o" || ! -f "lex.yy.o" || ! -f "parser.tab.o" || ! -f "LLVMGenerator.o" ]]; then
-  ../rm.sh
-  ../ir.sh
+  ./rm.sh
+  ./ir.sh
 fi
 
 # Executar o compilador (espera que o binário 'ambar' esteja na pasta pai)
