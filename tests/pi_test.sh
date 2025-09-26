@@ -1,6 +1,6 @@
 #!/bin/bash
 
-N_RUNS=10 # número de repetições (1000 pode ficar muito pesado com CPU e CSV)
+N_RUNS=100 # número de repetições (1000 pode ficar muito pesado com CPU e CSV)
 
 # Função para medir tempo médio
 average_time() {

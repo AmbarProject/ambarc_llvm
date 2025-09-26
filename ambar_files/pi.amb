@@ -10,4 +10,5 @@ func main() -> int {
   }
 
   pi = pi * 4.0;
+  return pi;
 }

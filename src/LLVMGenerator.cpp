@@ -5,11 +5,94 @@
 using namespace ambar;
 using namespace llvm;
 
-LLVMGenerator::LLVMGenerator() {
+LLVMGenerator::LLVMGenerator(OptimizationLevel level) 
+    : optLevel(level) {
     context = std::make_unique<LLVMContext>();
     module = std::make_unique<Module>("ambar", *context);
     builder = std::make_unique<IRBuilder<>>(*context);
     currentFunction = nullptr;
+}
+
+static llvm::OptimizationLevel toLLVLOptLevel(ambar::OptimizationLevel level) {
+    switch (level) {
+        case ambar::OptimizationLevel::O0: return llvm::OptimizationLevel::O0;
+        case ambar::OptimizationLevel::O1: return llvm::OptimizationLevel::O1;
+        case ambar::OptimizationLevel::O2: return llvm::OptimizationLevel::O2;
+        case ambar::OptimizationLevel::O3: return llvm::OptimizationLevel::O3;
+        case ambar::OptimizationLevel::Os: return llvm::OptimizationLevel::Os;
+        case ambar::OptimizationLevel::Oz: return llvm::OptimizationLevel::Oz;
+    }
+    return llvm::OptimizationLevel::O0; // fallback
+}
+
+
+void LLVMGenerator::setOptimizationLevel(OptimizationLevel level) {
+    optLevel = level;
+}
+
+void LLVMGenerator::optimizeFunction(Function* func) {
+    if (optLevel == OptimizationLevel::O0) {
+        return; // Sem otimizações
+    }
+    
+    // Criar pass manager para a função
+    legacy::FunctionPassManager FPM(module.get());
+    
+    // Adicionar passes baseados no nível de otimização - SIMPLIFICADO para LLVM 18
+    if (optLevel >= OptimizationLevel::O1) {
+        // Otimizações básicas usando apenas as APIs disponíveis
+        FPM.add(createPromoteMemoryToRegisterPass()); // Mem2Reg - disponível
+        FPM.add(createInstructionCombiningPass());     // InstCombine - disponível
+        FPM.add(createReassociatePass());              // Reassociate - disponível
+        FPM.add(createGVNPass());                      // GVN - disponível
+        FPM.add(createCFGSimplificationPass());        // SimplifyCFG - disponível
+    }
+    
+    if (optLevel >= OptimizationLevel::O2) {
+        // Otimizações médias
+        // FPM.add(createSCCPPass());                     // SCCP - disponível
+        // FPM.add(createDeadStoreEliminationPass());     // DSE - disponível
+        FPM.add(createLICMPass());                     // LICM - disponível
+    }
+    
+    if (optLevel >= OptimizationLevel::O3) {
+        // Otimizações agressivas
+        FPM.add(createLoopUnrollPass());               // Loop unroll - disponível
+        // Remover passes que podem não estar disponíveis
+    }
+    
+    // Inicializar e executar passes
+    FPM.doInitialization();
+    FPM.run(*func);
+}
+
+void LLVMGenerator::optimizeModule() {
+    if (optLevel == OptimizationLevel::O0) return;
+
+    PassBuilder PB;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+
+    // Registrar análises
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    ModulePassManager MPM;
+
+    if (optLevel >= OptimizationLevel::O2) {
+    // Usa pipeline padrão para O2/O3
+      MPM = PB.buildPerModuleDefaultPipeline(toLLVLOptLevel(optLevel));
+    } else if (optLevel >= OptimizationLevel::O1) {
+      MPM = PB.buildPerModuleDefaultPipeline(toLLVLOptLevel(optLevel));
+    }
+
+
+    MPM.run(*module, MAM);
 }
 
 GlobalVariable* LLVMGenerator::createStringLiteral(const std::string& value) {
@@ -60,7 +143,27 @@ void LLVMGenerator::generate(std::unique_ptr<ASTNode>& astRoot) {
         if (!hasExplicitMain) {
             generateMainFunction(astRoot);
         }
+
+        if (optLevel >= OptimizationLevel::O2) {
+            optimizeModule();
+        }
     }
+}
+
+void LLVMGenerator::enableBasicOptimizations() {
+    setOptimizationLevel(OptimizationLevel::O1);
+}
+
+void LLVMGenerator::enableAggressiveOptimizations() {
+    setOptimizationLevel(OptimizationLevel::O3);
+}
+
+void LLVMGenerator::enableSizeOptimizations() {
+    setOptimizationLevel(OptimizationLevel::Os);
+}
+
+void LLVMGenerator::disableOptimizations() {
+    setOptimizationLevel(OptimizationLevel::O0);
 }
 
 void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
@@ -186,8 +289,6 @@ Value* LLVMGenerator::generateLocalVariable(VarNode* node) {
                         initVal, 
                         ConstantInt::get(*context, APInt(32, 0)), 
                         "boolconv");
-                } else if (type->isIntegerTy(32) && initVal->getType()->isIntegerTy(1)) {
-                    initVal = builder->CreateZExt(initVal, type, "intconv");
                 } else if (type->isIntegerTy(32) && initVal->getType()->isIntegerTy(1)) {
                     initVal = builder->CreateZExt(initVal, type, "intconv");
                 } else if (type->isFloatTy() && initVal->getType()->isIntegerTy(32)) {
@@ -404,18 +505,6 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
                 return ConstantFP::get(*context, floatVal);
             } else if (operand->getType()->isIntegerTy(32)) {
                 APInt intVal = cast<ConstantInt>(operand)->getValue();
-                return ConstantInt::get(*context, -intVal);
-            } else {
-                llvm::errs() << "Erro: Operador '-' não suportado para este tipo em contexto constante\n";
-                return nullptr;
-            }
-        } 
-        else if (op == "!") {
-            if (operand->getType()->isIntegerTy(1)) {
-                APInt boolVal = cast<ConstantInt>(operand)->getValue();
-                return ConstantInt::get(*context, APInt(1, boolVal == 0 ? 1 : 0));
-            } else if (operand->getType()->isIntegerTy(32)) {
-                APInt intVal = cast<ConstantInt>(operand)->getValue();
                 return ConstantInt::get(*context, APInt(1, intVal == 0 ? 1 : 0));
             } else {
                 llvm::errs() << "Erro: Operador '!' não suportado para este tipo em contexto constante\n";
@@ -553,7 +642,7 @@ Value* LLVMGenerator::generateExpr(ASTNode* node) {
     } else if (auto assign = dynamic_cast<AssignNode*>(node)) {
         return generateAssign(assign);
     } else if (auto block = dynamic_cast<BlockNode*>(node)) {
-	return generateBlock(block);
+        return generateBlock(block);
     } else if (auto breakNode = dynamic_cast<BreakNode*>(node)) {
         return generateBreak(breakNode);
     } else if (auto continueNode = dynamic_cast<ContinueNode*>(node)) {
@@ -686,6 +775,7 @@ Value* LLVMGenerator::generateWhile(WhileNode* node) {
     
     return ConstantInt::get(*context, APInt(32, 0)); // Retorno dummy
 }
+
 
 Value* LLVMGenerator::generateIf(IfNode* node) {
     // Gerar a condição
@@ -1303,6 +1393,10 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
     if (verifyFunction(*func, &llvm::errs())) {
         llvm::errs() << "Erro: Função '" << node->getName() << "' inválida\n";
         func->eraseFromParent();
+    }
+
+    if (optLevel > OptimizationLevel::O0) {
+        optimizeFunction(func);
     }
     
     currentFunction = nullptr;

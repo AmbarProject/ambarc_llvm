@@ -21,6 +21,7 @@
 #include "ast/nodes/statements/ReturnNode.hpp"
 #include "ast/nodes/statements/WhileNode.hpp"
 
+// LLVM Core includes
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -28,6 +29,29 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Constants.h>
+
+// LLVM Pass includes - CORRIGIDOS para LLVM 18
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/Utils.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar/Reassociate.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/SimplifyCFG.h>
+#include <llvm/Transforms/Scalar/SROA.h>
+#include <llvm/Transforms/Scalar/JumpThreading.h>
+#include <llvm/Transforms/Scalar/CorrelatedValuePropagation.h>
+#include <llvm/Transforms/Scalar/LICM.h>
+#include <llvm/Transforms/Scalar/LoopUnrollPass.h>
+#include <llvm/Transforms/Vectorize/LoopVectorize.h>
+#include <llvm/Transforms/Vectorize/SLPVectorizer.h>
+#include <llvm/Transforms/IPO/Inliner.h>
+#include <llvm/Transforms/IPO/GlobalOpt.h>
+#include <llvm/Transforms/IPO/GlobalDCE.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/PassPlugin.h>
+#include <llvm/IR/PassManager.h>
 
 #include <map>
 #include <memory>
@@ -37,18 +61,44 @@
 
 namespace ambar {
 
+// Enum para níveis de otimização
+enum class OptimizationLevel {
+    O0, // Sem otimizações (debug)
+    O1, // Otimizações básicas
+    O2, // Otimizações padrão
+    O3, // Otimizações agressivas
+    Os, // Otimizado para tamanho
+    Oz  // Otimizado para tamanho máximo
+};
+
 class LLVMGenerator {
 public:
-    LLVMGenerator();
+    // Construtor com nível de otimização opcional
+    LLVMGenerator(OptimizationLevel level = OptimizationLevel::O0);
+    
+    // Método para configurar nível de otimização
+    void setOptimizationLevel(OptimizationLevel level);
+    
+    // Métodos auxiliares para diferentes níveis
+    void enableBasicOptimizations();
+    void enableAggressiveOptimizations();
+    void enableSizeOptimizations();
+    void disableOptimizations();
+    
     void generate(std::unique_ptr<ASTNode>& astRoot);
     void dumpIR() const;
-    std::unique_ptr<llvm::Module> module;
     void dumpIRToFile(const std::string& filename) const;
+    
+    std::unique_ptr<llvm::Module> module;
+    void optimizeModule(); 
 private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::IRBuilder<>> builder;
     llvm::Function* currentFunction = nullptr;
-
+    
+    // Nível de otimização
+    OptimizationLevel optLevel;
+    
     // Tabelas de símbolos
     std::unordered_map<std::string, llvm::Value*> namedValues;
     std::unordered_map<std::string, llvm::Type*> variableTypes;
@@ -58,7 +108,10 @@ private:
         
     std::vector<llvm::BasicBlock*> breakBlocks;
     std::vector<llvm::BasicBlock*> continueBlocks;
-
+    
+    // Métodos de otimização
+    void optimizeFunction(llvm::Function* func);
+    
     // Métodos de geração
     void generateProgram(ProgramNode* node);
     void generateFunction(FunctionNode* node);
@@ -69,7 +122,7 @@ private:
     void generateMainFunction(std::unique_ptr<ASTNode>& astRoot);
     
     llvm::Constant* evaluateConstantExpression(ASTNode* node);
-
+    
     // Métodos de geração de expressões
     llvm::Value* generateBinaryExpr(BinaryNode* node);
     llvm::Value* generateUnaryExpr(UnaryNode* node);
@@ -87,10 +140,10 @@ private:
     llvm::Value* generateReturn(ReturnNode* node);
     llvm::Value* generateWhile(WhileNode* node);
     llvm::Value* generateCall(CallNode* node);
-
+    
     void pushLoopBlocks(llvm::BasicBlock* breakBlock, llvm::BasicBlock* continueBlock); 
     void popLoopBlocks();
-
+    
     // Utilitários
     llvm::Type* getLLVMType(const std::string& typeName);
     void handleGlobalVariables(ProgramNode* program);
