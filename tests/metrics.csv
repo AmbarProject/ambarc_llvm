@@ -1,4 +1,7 @@
-Linguagem,Tempo Médio (s)
-Ambar,.198356
-C,.193950
-Rust,.194029
+Linguagem,Tempo_Medio_s
+C,.131574
+Rust,.128162
+Ambar,.133064
+JavaScript,.332942
+Java,.863117
+Python,7.860396
