@@ -1,3 +1,5 @@
 func main() -> int {
-  return 1;
+  x: string = "Hello, World!";
+  print(x);
+  return 0;
 }

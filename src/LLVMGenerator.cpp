@@ -11,6 +11,100 @@ LLVMGenerator::LLVMGenerator(OptimizationLevel level)
     module = std::make_unique<Module>("ambar", *context);
     builder = std::make_unique<IRBuilder<>>(*context);
     currentFunction = nullptr;
+    
+    // Declarar printf
+    declarePrintfFunction();
+}
+
+void LLVMGenerator::declarePrintfFunction() {
+    // Tipo de printf: int printf(i8*, ...)
+    FunctionType* printfType = FunctionType::get(
+        Type::getInt32Ty(*context),
+        {PointerType::get(Type::getInt8Ty(*context), 0)},
+        true  // varargs
+    );
+    
+    printfFunc = Function::Create(
+        printfType,
+        Function::ExternalLinkage,
+        "printf",
+        *module
+    );
+}
+
+Value* LLVMGenerator::generatePrintCall(CallNode* node) {
+    if (node->getArguments().empty()) {
+        llvm::errs() << "Erro: print() requer pelo menos um argumento\n";
+        return nullptr;
+    }
+    
+    std::vector<Value*> printfArgs;
+    
+    // Processar cada argumento
+    for (size_t i = 0; i < node->getArguments().size(); i++) {
+        Value* arg = generateExpr(node->getArguments()[i].get());
+        if (!arg) {
+            llvm::errs() << "Erro: Argumento " << i << " inválido para print\n";
+            return nullptr;
+        }
+        
+        // Criar format string apropriada baseada no tipo
+        std::string formatStr;
+        if (arg->getType()->isIntegerTy(32)) {
+            formatStr = "%d";
+        } else if (arg->getType()->isFloatTy()) {
+            formatStr = "%f";
+            // Converter float para double para printf (varargs promotion)
+            arg = builder->CreateFPExt(arg, Type::getDoubleTy(*context), "fpext");
+        } else if (arg->getType()->isIntegerTy(1)) {
+            formatStr = "%d";
+            // Converter bool para int
+            arg = builder->CreateZExt(arg, Type::getInt32Ty(*context), "boolconv");
+        } else if (arg->getType()->isPointerTy()) {
+            // String
+            formatStr = "%s";
+        } else {
+            llvm::errs() << "Erro: Tipo não suportado para print\n";
+            return nullptr;
+        }
+        
+        // Adicionar espaço entre argumentos (exceto o último)
+        if (i < node->getArguments().size() - 1) {
+            formatStr += " ";
+        }
+        
+        // Criar string literal para o formato
+        GlobalVariable* formatStrGlobal = createStringLiteral(formatStr);
+        Constant* zero = ConstantInt::get(Type::getInt32Ty(*context), 0);
+        Constant* indices[] = {zero, zero};
+        Value* formatStrPtr = ConstantExpr::getGetElementPtr(
+            formatStrGlobal->getValueType(),
+            formatStrGlobal,
+            indices,
+            true
+        );
+        
+        // Chamar printf para este argumento
+        printfArgs.clear();
+        printfArgs.push_back(formatStrPtr);
+        printfArgs.push_back(arg);
+        builder->CreateCall(printfFunc, printfArgs);
+    }
+    
+    // Adicionar newline no final
+    GlobalVariable* newlineGlobal = createStringLiteral("\n");
+    Constant* zero = ConstantInt::get(Type::getInt32Ty(*context), 0);
+    Constant* indices[] = {zero, zero};
+    Value* newlinePtr = ConstantExpr::getGetElementPtr(
+        newlineGlobal->getValueType(),
+        newlineGlobal,
+        indices,
+        true
+    );
+    
+    printfArgs.clear();
+    printfArgs.push_back(newlinePtr);
+    return builder->CreateCall(printfFunc, printfArgs);
 }
 
 static llvm::OptimizationLevel toLLVLOptLevel(ambar::OptimizationLevel level) {
@@ -1102,6 +1196,11 @@ Value* LLVMGenerator::generateString(StringNode* node) {
 
 Value* LLVMGenerator::generateCall(CallNode* node) {
     const std::string& funcName = node->getFunctionName();
+    
+    // Verificar se é a função built-in print
+    if (funcName == "print") {
+        return generatePrintCall(node);
+    }
     
     // Verificar se a função existe
     Function* callee = module->getFunction(funcName);

@@ -108,7 +108,7 @@ fi
 
 # Executar o compilador com nível de otimização
 echo "🚀 Gerando código IR..."
-../ambar "-O$OPT_LEVEL" "$filename.amb"
+./ambar "-O$OPT_LEVEL" "$filename.amb"
 
 # Verificar se o arquivo .ll foi gerado
 if [ ! -f "$filename.ll" ]; then

@@ -95,6 +95,10 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::IRBuilder<>> builder;
     llvm::Function* currentFunction = nullptr;
+    llvm::Function* printfFunc = nullptr;
+
+    void declarePrintfFunction();
+    llvm::Value* generatePrintCall(CallNode* node);
     
     // Nível de otimização
     OptimizationLevel optLevel;
