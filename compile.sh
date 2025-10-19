@@ -88,6 +88,15 @@ fi
 # Extrair diretório e nome do arquivo
 src_dir=$(dirname "$1")
 filename=$(basename "$1" .amb)
+original_dir=$(pwd)
+
+echo "📂 Diretório original: $original_dir"
+echo "📂 Diretório do arquivo: $src_dir"
+echo "🔨 Arquivo: $filename.amb"
+echo "⚡ Otimização: -O$OPT_LEVEL"
+
+# Salvar diretório atual para voltar depois
+SCRIPT_DIR=$(pwd)
 
 # Entrar na pasta do arquivo fonte
 cd "$src_dir" || {
@@ -95,9 +104,13 @@ cd "$src_dir" || {
   exit 1
 }
 
-echo "📂 Diretório: $(pwd)"
-echo "🔨 Arquivo: $filename.amb"
-echo "⚡ Otimização: -O$OPT_LEVEL"
+echo "📂 Compilando em: $(pwd)"
+
+# Voltar para o diretório do script para executar o compilador
+cd "$SCRIPT_DIR" || {
+  echo "Erro: Não foi possível voltar ao diretório do compilador"
+  exit 1
+}
 
 # Verificar objetos necessários para o compilador
 if [[ ! -f "main.o" || ! -f "lex.yy.o" || ! -f "parser.tab.o" || ! -f "LLVMGenerator.o" ]]; then
@@ -108,11 +121,11 @@ fi
 
 # Executar o compilador com nível de otimização
 echo "🚀 Gerando código IR..."
-./ambar "-O$OPT_LEVEL" "$filename.amb"
+./ambar "-O$OPT_LEVEL" "$src_dir/$filename.amb"
 
-# Verificar se o arquivo .ll foi gerado
-if [ ! -f "$filename.ll" ]; then
-  echo "❌ Erro: Arquivo '$filename.ll' não foi gerado"
+# Verificar se o arquivo .ll foi gerado no diretório correto
+if [ ! -f "$src_dir/$filename.ll" ]; then
+  echo "❌ Erro: Arquivo '$src_dir/$filename.ll' não foi gerado"
   exit 1
 fi
 
@@ -121,10 +134,16 @@ if [ "$SHOW_IR" = true ]; then
   echo ""
   echo "📄 CÓDIGO IR GERADO:"
   echo "=========================================="
-  cat "$filename.ll"
+  cat "$src_dir/$filename.ll"
   echo "=========================================="
   echo ""
 fi
+
+# Entrar no diretório do arquivo para compilar
+cd "$src_dir" || {
+  echo "Erro: Não foi possível entrar no diretório '$src_dir'"
+  exit 1
+}
 
 # Compilar IR para objeto
 echo "🔨 Compilando IR para objeto..."
@@ -163,5 +182,8 @@ if [ "$KEEP_OBJ" = false ]; then
 else
   echo "💾 Mantido: $filename.o"
 fi
+
+# Voltar ao diretório original
+cd "$original_dir"
 
 exit $EXIT_CODE

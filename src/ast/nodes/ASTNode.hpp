@@ -36,7 +36,9 @@ public:
         CallNode,
         BreakNode,
         ContinueNode,
-        UnaryNode
+        UnaryNode,
+        ArrayNode,
+        ArrayAccessNode
     };
 
     explicit ASTNode(NodeType type, SourceLocation loc = {})
@@ -44,6 +46,7 @@ public:
 
     virtual ~ASTNode() = default;
 
+    
     /**
      * @brief Get the type of this node
      * @return NodeType The node type

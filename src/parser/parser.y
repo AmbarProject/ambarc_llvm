@@ -12,6 +12,8 @@
 #include "../ast/nodes/expressions/NumberNode.hpp"
 #include "../ast/nodes/expressions/StringNode.hpp"
 #include "../ast/nodes/expressions/UnaryNode.hpp"
+#include "../ast/nodes/expressions/ArrayNode.hpp"
+#include "../ast/nodes/expressions/ArrayAccessNode.hpp"
 
 #include "../ast/nodes/statements/AssignNode.hpp"
 #include "../ast/nodes/statements/BlockNode.hpp"
@@ -64,12 +66,12 @@ std::unique_ptr<ambar::ASTNode> ambar::astRoot = nullptr;
 %type <node> program decl_list decl var_decl stmt assign_stmt call_stmt 
              return_stmt if_stmt while_stmt for_stmt for_init for_var_decl for_assign_stmt opt_expr break_stmt continue_stmt 
              block expr logic_expr rel_expr arith_expr term factor func_call
-             func_decl import_decl
+             func_decl import_decl array_literal array_access
 
 %type <str> type
 %type <stmts> stmt_list
 %type <params> params opt_params
-%type <stmts> opt_args args
+%type <stmts> opt_args args array_elements 
 
 %token <id> IDENTIFIER
 %token <num> NUM_INT
@@ -81,7 +83,7 @@ std::unique_ptr<ambar::ASTNode> ambar::astRoot = nullptr;
 %token INT FLOAT BOOL STRING_T VOID
 %token AND OR NOT EQ NEQ LT LE GT GE
 %token ADD SUB MUL DIV MOD ASSIGN ARROW
-%token SEMI COLON COMMA DOT LPAREN RPAREN LBRACE RBRACE
+%token SEMI COLON COMMA DOT LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET
 
 %right ASSIGN
 %left OR
@@ -98,14 +100,11 @@ std::unique_ptr<ambar::ASTNode> ambar::astRoot = nullptr;
 
 program:
     decl_list {
-        /* decl_list sempre retorna um ProgramNode* (ou nullptr) */
         if ($1 == nullptr) {
-            /* grammar vazia -> criar ProgramNode vazio */
             auto prog = std::make_unique<ambar::ProgramNode>();
             ambar::astRoot = std::move(prog);
             $$ = ambar::astRoot.get();
         } else {
-            /* assumir ownership do ProgramNode retornado */
             ambar::astRoot = std::unique_ptr<ambar::ASTNode>($1);
             $$ = ambar::astRoot.get();
         }
@@ -150,11 +149,17 @@ var_decl:
           free($1);
           $$ = var.release();
       }
+    | IDENTIFIER COLON type ASSIGN array_literal SEMI {
+          // CORREÇÃO: Usar o array_literal diretamente
+          auto var = std::make_unique<ambar::VarNode>(std::string($1), *$3, std::unique_ptr<ambar::ASTNode>($5));
+          delete $3;
+          free($1);
+          $$ = var.release();
+      }
 ;
 
 func_decl: 
     FUNC IDENTIFIER LPAREN opt_params RPAREN ARROW type block {
-        /* Construir lista de params: se $4 == nullptr -> lista vazia */
         std::vector<std::pair<std::string, std::string>> params_vec;
         if ($4 != nullptr) {
             params_vec = std::move(*$4);
@@ -182,16 +187,17 @@ opt_params:
 params: 
       IDENTIFIER COLON type {
           $$ = new std::vector<std::pair<std::string, std::string>>();
-          $$->push_back({*$3, std::string($1)}); // CORREÇÃO: tipo, nome
+          $$->push_back({*$3, std::string($1)});
           delete $3; 
           free($1);
       }
     | params COMMA IDENTIFIER COLON type {
-          $1->push_back({*$5, std::string($3)}); // CORREÇÃO: tipo, nome
+          $1->push_back({*$5, std::string($3)});
           delete $5; 
           free($3);
           $$ = $1;
       }
+;
 
 type:
     INT       { $$ = new std::string("int"); }
@@ -199,6 +205,16 @@ type:
   | BOOL      { $$ = new std::string("bool"); }
   | STRING_T  { $$ = new std::string("string"); }
   | VOID      { $$ = new std::string("void"); }
+  | type LBRACKET NUM_INT RBRACKET { 
+        std::string arrayType = *$1 + "[]"; 
+        delete $1;
+        $$ = new std::string(arrayType);
+    }
+  | type LBRACKET RBRACKET { 
+        std::string arrayType = *$1 + "[]"; 
+        delete $1;
+        $$ = new std::string(arrayType);
+    }
 ;
 
 stmt: 
@@ -219,6 +235,19 @@ assign_stmt:
         auto assign = std::make_unique<ambar::AssignNode>(std::string($1), std::unique_ptr<ambar::ASTNode>($3));
         free($1);
         $$ = assign.release();
+    }
+    | array_access ASSIGN expr SEMI {
+        auto arrayAccess = dynamic_cast<ambar::ArrayAccessNode*>($1);
+        if (arrayAccess) {
+            auto assign = std::make_unique<ambar::AssignNode>(
+                arrayAccess->getArrayName(), 
+                std::unique_ptr<ambar::ASTNode>($3),
+                std::unique_ptr<ambar::ASTNode>(arrayAccess->getIndex())
+            );
+            $$ = assign.release();
+        } else {
+            $$ = nullptr;
+        }
     }
 ;
 
@@ -291,14 +320,12 @@ for_assign_stmt:
     }
 ;
 
-
 for_init:
       for_var_decl { $$ = $1; }
     | for_assign_stmt  { $$ = $1; }
     | expr         { $$ = $1; }
     | /* empty */  { $$ = nullptr; }
 ;
-
 
 opt_expr:
       /* empty */ { $$ = nullptr; }
@@ -459,9 +486,66 @@ factor:
     | BOOL_TRUE      { auto boolNode = std::make_unique<ambar::BoolNode>(true); $$ = boolNode.release(); }
     | BOOL_FALSE     { auto boolNode = std::make_unique<ambar::BoolNode>(false); $$ = boolNode.release(); }
     | func_call      { $$ = $1; }
+    | array_literal  { $$ = $1; }
+    | array_access   { $$ = $1; }
     | LPAREN expr RPAREN { $$ = $2; }
-    | SUB factor { /* unary minus */ auto u = std::make_unique<ambar::UnaryNode>("-", std::unique_ptr<ambar::ASTNode>($2)); $$ = u.release(); }
+    | SUB factor { auto u = std::make_unique<ambar::UnaryNode>("-", std::unique_ptr<ambar::ASTNode>($2)); $$ = u.release(); }
     | NOT factor { auto u = std::make_unique<ambar::UnaryNode>("NOT", std::unique_ptr<ambar::ASTNode>($2)); $$ = u.release(); }
+;
+
+array_literal:
+    LBRACKET array_elements RBRACKET {
+        // Determinar tipo baseado nos elementos
+        std::string elementType = "int"; // padrão
+        
+        if ($2 != nullptr && !$2->empty()) {
+            // Inferir tipo do primeiro elemento
+            ambar::ASTNode* firstElem = $2->at(0);
+            if (auto numNode = dynamic_cast<ambar::NumberNode*>(firstElem)) {
+                elementType = numNode->isFloatingPoint() ? "float" : "int";
+            } else if (dynamic_cast<ambar::BoolNode*>(firstElem)) {
+                elementType = "bool";
+            } else if (dynamic_cast<ambar::StringNode*>(firstElem)) {
+                elementType = "string";
+            }
+        }
+        
+        // CORREÇÃO: Criar ArrayNode manualmente para evitar problemas com make_unique
+        ambar::ArrayNode* arrayNode = new ambar::ArrayNode(*$2, elementType);
+        delete $2; // Limpar o vetor temporário
+        $$ = arrayNode;
+        
+        printf("DEBUG PARSER: Array literal criado com %d elementos do tipo %s\n", 
+               arrayNode->getSize(), elementType.c_str());
+    }
+    | LBRACKET RBRACKET {
+        std::string elementType = "int"; // Tipo padrão
+        ambar::ArrayNode* arrayNode = new ambar::ArrayNode(elementType);
+        $$ = arrayNode;
+        printf("DEBUG PARSER: Array literal vazio criado\n");
+    }
+;
+
+array_elements:
+    expr {
+        $$ = new std::vector<ambar::ASTNode*>();
+        if ($1) $$->push_back($1);
+    }
+    | array_elements COMMA expr {
+        if ($3) $1->push_back($3);
+        $$ = $1;
+    }
+;
+
+array_access:
+    IDENTIFIER LBRACKET expr RBRACKET {
+        auto accessNode = std::make_unique<ambar::ArrayAccessNode>(
+            std::string($1), 
+            std::unique_ptr<ambar::ASTNode>($3)
+        );
+        free($1);
+        $$ = accessNode.release();
+    }
 ;
 
 func_call: 
@@ -486,7 +570,5 @@ void yyerror(const char* s) {
 }
 
 void cleanup() {
-    /* astRoot é unique_ptr — destruição automática */
     ambar::astRoot.reset();
 }
-

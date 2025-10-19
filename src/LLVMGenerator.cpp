@@ -16,6 +16,348 @@ LLVMGenerator::LLVMGenerator(OptimizationLevel level)
     declarePrintfFunction();
 }
 
+// Implementação do OptimizationAnalyzer
+std::vector<OptimizationAnalyzer::ProblematicNode> 
+OptimizationAnalyzer::analyzeOptimizationProblems() {
+    std::vector<ProblematicNode> problems;
+    
+    for (llvm::Function& F : module) {
+        if (!F.isDeclaration() && !F.empty()) {
+            analyzeFunction(F, problems);
+        }
+    }
+    
+    return problems;
+}
+
+void OptimizationAnalyzer::analyzeFunction(llvm::Function& F, 
+                                         std::vector<ProblematicNode>& problems) {
+    // Usar AnalysisManager para obter LoopInfo
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::ModuleAnalysisManager MAM;
+    
+    llvm::PassBuilder PB;
+    PB.registerFunctionAnalyses(FAM);
+    
+    auto& LI = FAM.getResult<llvm::LoopAnalysis>(F);
+    
+    for (llvm::BasicBlock& BB : F) {
+        analyzeBasicBlock(BB, F, problems);
+    }
+}
+
+void OptimizationAnalyzer::analyzeBasicBlock(llvm::BasicBlock& BB, 
+                                           llvm::Function& F,
+                                           std::vector<ProblematicNode>& problems) {
+    std::vector<std::string> blockProblems;
+    int totalSeverity = 0;
+    
+    // Análise de computações redundantes
+    if (hasRedundantComputations(BB)) {
+        blockProblems.push_back("Computações redundantes detectadas");
+        totalSeverity += 3;
+    }
+    
+    // Análise de operações custosas
+    if (hasExpensiveOperations(BB)) {
+        blockProblems.push_back("Operações computacionalmente custosas");
+        totalSeverity += 4;
+    }
+    
+    // Análise de padrões de branch
+    if (hasPoorBranchPattern(BB)) {
+        blockProblems.push_back("Padrão de branch ineficiente");
+        totalSeverity += 2;
+    }
+    
+    // Análise de ineficiências de memória
+    if (hasMemoryInefficiencies(BB)) {
+        blockProblems.push_back("Ineficiências de acesso à memória");
+        totalSeverity += 3;
+    }
+    
+    // Análise de loops
+    if (hasLoopInefficiencies(BB, F)) {
+        blockProblems.push_back("Ineficiências em estruturas de loop");
+        totalSeverity += 5;
+    }
+    
+    // Se encontramos problemas, adicionar ao relatório
+    if (!blockProblems.empty() && totalSeverity >= 3) {
+        ProblematicNode node;
+        node.functionName = F.getName().str();
+        node.blockName = BB.getName().str();
+        node.block = &BB;
+        node.severity = std::min(10, totalSeverity);
+        
+        // Criar descrição consolidada
+        std::stringstream desc;
+        desc << "Bloco " << BB.getName().str() << " na função " << F.getName().str() 
+             << " possui " << blockProblems.size() << " problemas:\n";
+        for (size_t i = 0; i < blockProblems.size(); ++i) {
+            desc << "  " << (i + 1) << ". " << blockProblems[i] << "\n";
+        }
+        desc << "Severidade: " << totalSeverity << "/10";
+        
+        node.description = desc.str();
+        node.problemType = "Múltiplas Ineficiências";
+        
+        problems.push_back(node);
+    }
+}
+
+bool OptimizationAnalyzer::hasRedundantComputations(llvm::BasicBlock& BB) {
+    int loadCount = 0;
+    int storeCount = 0;
+    int computationCount = 0;
+    
+    for (llvm::Instruction& I : BB) {
+        if (llvm::isa<llvm::LoadInst>(&I)) loadCount++;
+        if (llvm::isa<llvm::StoreInst>(&I)) storeCount++;
+        if (llvm::isa<llvm::BinaryOperator>(&I)) computationCount++;
+        
+        // Verificar loads redundantes
+        if (llvm::isa<llvm::LoadInst>(&I)) {
+            // Simplificação: considerar muitos loads como potencial problema
+            if (loadCount > 5) return true;
+        }
+    }
+    
+    // Muitas operações de memória em relação a computações
+    if ((loadCount + storeCount) > computationCount * 2) {
+        return true;
+    }
+    
+    return false;
+}
+
+bool OptimizationAnalyzer::hasExpensiveOperations(llvm::BasicBlock& BB) {
+    for (llvm::Instruction& I : BB) {
+        // Verificar operações de divisão/modulo (são mais caras)
+        if (auto* binOp = llvm::dyn_cast<llvm::BinaryOperator>(&I)) {
+            llvm::Instruction::BinaryOps opcode = binOp->getOpcode();
+            if (opcode == llvm::Instruction::SDiv || opcode == llvm::Instruction::UDiv ||
+                opcode == llvm::Instruction::SRem || opcode == llvm::Instruction::URem ||
+                opcode == llvm::Instruction::FDiv || opcode == llvm::Instruction::FRem) {
+                return true;
+            }
+        }
+        
+        // Verificar conversões de tipo custosas
+        if (llvm::isa<llvm::FPToSIInst>(&I) || llvm::isa<llvm::SIToFPInst>(&I) ||
+            llvm::isa<llvm::FPTruncInst>(&I) || llvm::isa<llvm::FPExtInst>(&I)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool OptimizationAnalyzer::hasPoorBranchPattern(llvm::BasicBlock& BB) {
+    // Verificar se é um bloco com muitos branches condicionais
+    int branchCount = 0;
+    int totalInstructions = 0;
+    
+    for (llvm::Instruction& I : BB) {
+        totalInstructions++;
+        if (llvm::isa<llvm::BranchInst>(&I) || llvm::isa<llvm::SwitchInst>(&I)) {
+            branchCount++;
+        }
+    }
+    
+    // Se mais de 30% das instruções são branches, pode ser problemático
+    if (totalInstructions > 0 && (branchCount * 100 / totalInstructions) > 30) {
+        return true;
+    }
+    
+    return false;
+}
+
+// CORREÇÃO: Parâmetro correto
+bool OptimizationAnalyzer::hasMemoryInefficiencies(llvm::BasicBlock& BB) {
+    int memoryOps = 0;
+    int totalInstructions = 0;
+    
+    for (llvm::Instruction& I : BB) {
+        totalInstructions++;
+        if (llvm::isa<llvm::LoadInst>(&I) || llvm::isa<llvm::StoreInst>(&I) ||
+            llvm::isa<llvm::AllocaInst>(&I) || llvm::isa<llvm::GetElementPtrInst>(&I)) {
+            memoryOps++;
+        }
+    }
+    
+    // Se mais de 50% são operações de memória
+    if (totalInstructions > 0 && (memoryOps * 100 / totalInstructions) > 50) {
+        return true;
+    }
+    
+    return false;
+}
+
+bool OptimizationAnalyzer::hasLoopInefficiencies(llvm::BasicBlock& BB, llvm::Function& F) {
+    // Verificação simplificada para blocos de loop
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    
+    llvm::PassBuilder PB;
+    PB.registerFunctionAnalyses(FAM);
+    
+    auto& LI = FAM.getResult<llvm::LoopAnalysis>(F);
+    
+    if (llvm::Loop* L = LI.getLoopFor(&BB)) {
+        // Bloco pertence a um loop
+        if (L->getHeader() == &BB) {
+            // É o header do loop - verificar características problemáticas
+            int invariantCount = 0;
+            for (llvm::Instruction& I : BB) {
+                // Verificação simplificada de invariantes de loop
+                if (llvm::isa<llvm::LoadInst>(&I) || llvm::isa<llvm::BinaryOperator>(&I)) {
+                    invariantCount++;
+                }
+            }
+            
+            if (invariantCount > 3) {
+                return true; // Possível invariante de loop não movido
+            }
+        }
+    }
+    
+    return false;
+}
+
+void OptimizationAnalyzer::printProblematicNodes(const std::vector<ProblematicNode>& problems) {
+    if (problems.empty()) {
+        llvm::errs() << "\n=== ANÁLISE DE OTIMIZAÇÃO ===\n";
+        llvm::errs() << "Nenhum nó problemático detectado. O código está bem otimizado!\n";
+        return;
+    }
+    
+    llvm::errs() << "\n=== ANÁLISE DE OTIMIZAÇÃO - NÓS PROBLEMÁTICOS DETECTADOS ===\n\n";
+    
+    // Ordenar por severidade
+    auto sortedProblems = problems;
+    std::sort(sortedProblems.begin(), sortedProblems.end(),
+              [](const ProblematicNode& a, const ProblematicNode& b) {
+                  return a.severity > b.severity;
+              });
+    
+    for (size_t i = 0; i < sortedProblems.size(); ++i) {
+        const auto& problem = sortedProblems[i];
+        llvm::errs() << "PROBLEMA #" << (i + 1) << " [Severidade: " << problem.severity << "/10]\n";
+        llvm::errs() << "Função: " << problem.functionName << "\n";
+        llvm::errs() << "Bloco: " << problem.blockName << "\n";
+        llvm::errs() << "Tipo: " << problem.problemType << "\n";
+        llvm::errs() << "Descrição:\n" << problem.description << "\n";
+        
+        // Mostrar algumas instruções do bloco problemático
+        llvm::errs() << "Instruções do bloco:\n";
+        int instCount = 0;
+        for (const llvm::Instruction& I : *problem.block) {
+            if (instCount < 5) { // Mostrar apenas as primeiras 5 instruções
+                llvm::errs() << "  ";
+                I.print(llvm::errs());
+                llvm::errs() << "\n";
+                instCount++;
+            }
+        }
+        if (instCount >= 5) {
+            llvm::errs() << "  ... (mais instruções)\n";
+        }
+        llvm::errs() << "----------------------------------------\n\n";
+    }
+    
+    llvm::errs() << "Total de nós problemáticos detectados: " << problems.size() << "\n";
+}
+
+void LLVMGenerator::analyzeAndReportOptimizationProblems() {
+    llvm::errs() << "\n🔍 Iniciando análise inovadora de otimização por grafos...\n";
+    
+    OptimizationAnalyzer analyzer(*module);
+    auto problems = analyzer.analyzeOptimizationProblems();
+    analyzer.printProblematicNodes(problems);
+    
+    // Também executar análise avançada
+    performAdvancedOptimizationAnalysis();
+}
+
+void LLVMGenerator::performAdvancedOptimizationAnalysis() {
+    llvm::errs() << "\n=== ANÁLISE AVANÇADA DE GRAFOS ===\n";
+    
+    int totalBlocks = 0;
+    int totalFunctions = 0;
+    int problematicBlocks = 0;
+    
+    for (llvm::Function& F : *module) {
+        if (F.isDeclaration() || F.empty()) continue;
+        
+        totalFunctions++;
+        
+        for (llvm::BasicBlock& BB : F) {
+            totalBlocks++;
+            
+            // Análise de complexidade do bloco
+            int instructionCount = 0;
+            int memoryOps = 0;
+            int branches = 0;
+            
+            for (llvm::Instruction& I : BB) {
+                instructionCount++;
+                if (llvm::isa<llvm::LoadInst>(&I) || llvm::isa<llvm::StoreInst>(&I)) {
+                    memoryOps++;
+                }
+                if (llvm::isa<llvm::BranchInst>(&I) || llvm::isa<llvm::SwitchInst>(&I)) {
+                    branches++;
+                }
+            }
+            
+            // Heurísticas para identificar blocos problemáticos
+            bool isProblematic = false;
+            std::string problemReason;
+            
+            if (instructionCount > 20) {
+                isProblematic = true;
+                problemReason = "Bloco muito grande (" + std::to_string(instructionCount) + " instruções)";
+            } else if (memoryOps > 5) {
+                isProblematic = true;
+                problemReason = "Muitas operações de memória (" + std::to_string(memoryOps) + ")";
+            } else if (branches > 2) {
+                isProblematic = true;
+                problemReason = "Muitos branches (" + std::to_string(branches) + ")";
+            }
+            
+            if (isProblematic) {
+                problematicBlocks++;
+                llvm::errs() << "⚠️  NÓ MAL OTIMIZADO DETECTADO:\n";
+                llvm::errs() << "   Função: " << F.getName().str() << "\n";
+                llvm::errs() << "   Bloco: " << BB.getName().str() << "\n";
+                llvm::errs() << "   Problema: " << problemReason << "\n";
+                llvm::errs() << "   Instruções: " << instructionCount 
+                           << ", Memória: " << memoryOps 
+                           << ", Branches: " << branches << "\n\n";
+            }
+        }
+    }
+    
+    // Estatísticas finais
+    llvm::errs() << "=== RELATÓRIO FINAL ===\n";
+    llvm::errs() << "Funções analisadas: " << totalFunctions << "\n";
+    llvm::errs() << "Blocos totais: " << totalBlocks << "\n";
+    llvm::errs() << "Blocos problemáticos: " << problematicBlocks << "\n";
+    
+    if (totalBlocks > 0) {
+        double problematicPercentage = (problematicBlocks * 100.0) / totalBlocks;
+        llvm::errs() << "Taxa de problemas: " << problematicPercentage << "%\n";
+        
+        if (problematicPercentage > 20.0) {
+            llvm::errs() << "❌ ALTA TAXA DE PROBLEMAS: Considere reestruturar o código!\n";
+        } else if (problematicPercentage > 10.0) {
+            llvm::errs() << "⚠️  TAXA MODERADA DE PROBLEMAS: Algumas otimizações são recomendadas\n";
+        } else {
+            llvm::errs() << "✅ BAIXA TAXA DE PROBLEMAS: Código bem estruturado!\n";
+        }
+    }
+}
+
 void LLVMGenerator::declarePrintfFunction() {
     // Tipo de printf: int printf(i8*, ...)
     FunctionType* printfType = FunctionType::get(
@@ -30,6 +372,183 @@ void LLVMGenerator::declarePrintfFunction() {
         "printf",
         *module
     );
+}
+
+// CORREÇÃO COMPLETA do generateArrayLiteral
+llvm::Value* LLVMGenerator::generateArrayLiteral(ArrayNode* node) {
+    const auto& elements = node->getElements();
+    
+    // DEBUG: Verificar o que estamos recebendo
+    llvm::errs() << "DEBUG: Gerando array literal com " << elements.size() << " elementos\n";
+    
+    // Obter tipo do elemento
+    Type* elemType = getLLVMType(node->getElementType());
+    if (!elemType) {
+        llvm::errs() << "Erro: Tipo de elemento desconhecido: " << node->getElementType() << "\n";
+        return nullptr;
+    }
+    
+    if (!currentFunction) {
+        llvm::errs() << "Erro: Array literal fora de função\n";
+        return nullptr;
+    }
+    
+    // CORREÇÃO: Criar array com tamanho exato dos elementos
+    ArrayType* arrayType = ArrayType::get(elemType, elements.size());
+    
+    // CORREÇÃO: Alocar na stack
+    AllocaInst* arrayStorage = builder->CreateAlloca(arrayType, nullptr, "array.storage");
+    
+    // CORREÇÃO: Inicializar cada elemento
+    for (size_t i = 0; i < elements.size(); ++i) {
+        Value* elementValue = generateExpr(elements[i].get());
+        if (!elementValue) {
+            llvm::errs() << "Erro: Não foi possível gerar elemento " << i << " do array\n";
+            return nullptr;
+        }
+        
+        // DEBUG
+        llvm::errs() << "DEBUG: Elemento " << i << " - tipo: " << *elementValue->getType() << "\n";
+        
+        // Calcular ponteiro para este elemento
+        Value* indices[] = {
+            ConstantInt::get(Type::getInt32Ty(*context), 0),
+            ConstantInt::get(Type::getInt32Ty(*context), i)
+        };
+        
+        Value* elementPtr = builder->CreateGEP(arrayType, arrayStorage, indices, "elem.ptr");
+        
+        // Conversão de tipo se necessário
+        if (elementValue->getType() != elemType) {
+            if (elemType->isIntegerTy(32) && elementValue->getType()->isIntegerTy(1)) {
+                elementValue = builder->CreateZExt(elementValue, elemType, "zext");
+            } else if (elemType->isIntegerTy(1) && elementValue->getType()->isIntegerTy(32)) {
+                elementValue = builder->CreateICmpNE(elementValue, 
+                    ConstantInt::get(*context, APInt(32, 0)), "boolconv");
+            } else if (elemType->isFloatTy() && elementValue->getType()->isIntegerTy(32)) {
+                elementValue = builder->CreateSIToFP(elementValue, elemType, "sitofp");
+            }
+        }
+        
+        // Armazenar valor
+        builder->CreateStore(elementValue, elementPtr);
+        
+        // DEBUG
+        llvm::errs() << "DEBUG: Armazenado elemento " << i << " no array\n";
+    }
+    
+    llvm::errs() << "DEBUG: Array literal criado com sucesso\n";
+    return arrayStorage;
+}
+
+
+Value* LLVMGenerator::generateArrayAssignment(AssignNode* node) {
+    const std::string& arrayName = node->getIdentifier();
+    Value* indexValue = generateExpr(node->getIndexExpr());
+    Value* value = generateExpr(node->getValueExpr());
+    
+    if (!indexValue || !value) {
+        llvm::errs() << "Erro: Expressão inválida em assignment de array\n";
+        return nullptr;
+    }
+    
+    // Encontrar o array
+    Value* arrayPtr = nullptr;
+    Type* arrayType = nullptr;
+    
+    if (namedValues.count(arrayName)) {
+        arrayPtr = namedValues[arrayName];
+        arrayType = variableTypes[arrayName];
+    } else if (globalValues.count(arrayName)) {
+        arrayPtr = globalValues[arrayName];
+        arrayType = globalTypes[arrayName];
+    } else {
+        llvm::errs() << "Erro: Array '" << arrayName << "' não declarado\n";
+        return nullptr;
+    }
+    
+    // CORREÇÃO: Obter tipo do elemento corretamente
+    Type* elementType = getArrayElementType(arrayType);
+    if (!elementType) {
+        llvm::errs() << "Erro: Não foi possível determinar o tipo do elemento do array '" 
+                     << arrayName << "'\n";
+        return nullptr;
+    }
+    
+    // CORREÇÃO: Cálculo correto do ponteiro para elemento
+    Value* indices[] = { 
+        ConstantInt::get(Type::getInt32Ty(*context), 0), // índice base
+        indexValue // índice do elemento
+    };
+    
+    // CORREÇÃO: Usar CreateInBoundsGEP para cálculo seguro de ponteiro
+    Value* elemPtr = builder->CreateInBoundsGEP(arrayType, arrayPtr, indices, "arrayelem");
+    
+    // Fazer conversão de tipo se necessário
+    if (value->getType() != elementType) {
+        if (elementType->isIntegerTy(32) && value->getType()->isIntegerTy(1)) {
+            value = builder->CreateZExt(value, elementType, "intconv");
+        } else if (elementType->isIntegerTy(1) && value->getType()->isIntegerTy(32)) {
+            value = builder->CreateICmpNE(value, ConstantInt::get(*context, APInt(32, 0)), "boolconv");
+        } else if (elementType->isFloatTy() && value->getType()->isIntegerTy(32)) {
+            value = builder->CreateSIToFP(value, elementType, "floatconv");
+        } else if (elementType->isIntegerTy(32) && value->getType()->isFloatTy()) {
+            value = builder->CreateFPToSI(value, elementType, "intconv");
+        } else {
+            llvm::errs() << "Erro: Tipos incompatíveis em assignment de array. Esperado: " 
+                        << *elementType << ", obtido: " << *value->getType() << "\n";
+            return nullptr;
+        }
+    }
+    
+    // Store do valor
+    builder->CreateStore(value, elemPtr);
+    return value;
+}
+
+Value* LLVMGenerator::generateArrayAccess(ArrayAccessNode* node) {
+    const std::string& arrayName = node->getArrayName();
+    Value* indexValue = generateExpr(node->getIndex());
+    
+    if (!indexValue) {
+        llvm::errs() << "Erro: Índice de array inválido\n";
+        return nullptr;
+    }
+    
+    // Verificar se é variável local ou global
+    Value* arrayPtr = nullptr;
+    Type* arrayType = nullptr;
+    
+    if (namedValues.count(arrayName)) {
+        arrayPtr = namedValues[arrayName];
+        arrayType = variableTypes[arrayName];
+    } else if (globalValues.count(arrayName)) {
+        arrayPtr = globalValues[arrayName];
+        arrayType = globalTypes[arrayName];
+    } else {
+        llvm::errs() << "Erro: Array '" << arrayName << "' não declarado\n";
+        return nullptr;
+    }
+    
+    // CORREÇÃO: Obter tipo do elemento corretamente
+    Type* elementType = getArrayElementType(arrayType);
+    if (!elementType) {
+        llvm::errs() << "Erro: Não foi possível determinar o tipo do elemento do array '" 
+                     << arrayName << "'\n";
+        return nullptr;
+    }
+    
+    // CORREÇÃO: Cálculo correto do ponteiro para elemento
+    Value* indices[] = {
+        ConstantInt::get(Type::getInt32Ty(*context), 0), // índice base
+        indexValue // índice do elemento
+    };
+    
+    // CORREÇÃO: Usar CreateInBoundsGEP
+    Value* elemPtr = builder->CreateInBoundsGEP(arrayType, arrayPtr, indices, "arrayelem");
+    
+    // Load do valor
+    return builder->CreateLoad(elementType, elemPtr, "arrayload");
 }
 
 Value* LLVMGenerator::generatePrintCall(CallNode* node) {
@@ -375,6 +894,7 @@ Value* LLVMGenerator::generateLocalVariable(VarNode* node) {
     variableTypes[node->getName()] = type;
 
     if (node->getInit()) {
+        // CORREÇÃO: usar .get()
         Value* initVal = generateExpr(node->getInit().get());
         if (initVal) {
             if (initVal->getType() != type) {
@@ -400,6 +920,7 @@ Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
     Constant* initVal = nullptr;
     
     if (node->getInit()) {
+        // CORREÇÃO: usar .get()
         initVal = evaluateConstantExpression(node->getInit().get());
         
         if (!initVal) {
@@ -417,6 +938,7 @@ Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
             BasicBlock* bb = BasicBlock::Create(*context, "entry", tempFunc);
             builder->SetInsertPoint(bb);
             
+            // CORREÇÃO: usar .get()
             Value* init = generateExpr(node->getInit().get());
             if (auto constant = dyn_cast<Constant>(init)) {
                 initVal = constant;
@@ -664,6 +1186,7 @@ void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
     for (const auto& decl : program->getDeclarations()) {
         if (auto varNode = dynamic_cast<VarNode*>(decl.get())) {
             if (varNode->getInit()) {
+                // CORREÇÃO: usar .get()
                 Constant* initVal = evaluateConstantExpression(varNode->getInit().get());
                 if (initVal) {
                     // Verificar compatibilidade de tipos
@@ -703,10 +1226,70 @@ void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
     }
 }
 
-Value* LLVMGenerator::generateVariable(VarNode* node) {
-    if (currentFunction) {
-        return generateLocalVariable(node);
+Type* LLVMGenerator::getArrayElementType(Type* arrayType) {
+    if (arrayType->isArrayTy()) {
+        return arrayType->getArrayElementType();
+    } else if (arrayType->isPointerTy()) {
+        PointerType* ptrType = cast<PointerType>(arrayType);
+        return ptrType->getArrayElementType();
     }
+    return nullptr;
+}
+
+// CORREÇÃO: Método generateVariable para arrays
+llvm::Value* LLVMGenerator::generateVariable(VarNode* node) {
+    std::string typeName = node->getType();
+    Type* declaredType = getLLVMType(typeName);
+    
+    if (!declaredType) {
+        llvm::errs() << "Erro: Tipo desconhecido: " << typeName << "\n";
+        return nullptr;
+    }
+
+    if (currentFunction) {
+        // CORREÇÃO: Se temos inicialização, usar o tipo do inicializador
+        if (node->getInit()) {
+            Value* initVal = generateExpr(node->getInit().get());
+            if (initVal) {
+                // Para arrays, usar o tipo exato do inicializador
+                AllocaInst* alloca = builder->CreateAlloca(initVal->getType(), nullptr, node->getName());
+                namedValues[node->getName()] = alloca;
+                variableTypes[node->getName()] = initVal->getType();
+                
+                // CORREÇÃO: Copiar array completo
+                if (initVal->getType()->isArrayTy()) {
+                    ArrayType* arrayType = cast<ArrayType>(initVal->getType());
+                    Type* elemType = arrayType->getArrayElementType();
+                    
+                    for (unsigned i = 0; i < arrayType->getNumElements(); ++i) {
+                        Value* indices[] = {
+                            ConstantInt::get(Type::getInt32Ty(*context), 0),
+                            ConstantInt::get(Type::getInt32Ty(*context), i)
+                        };
+                        
+                        // Carregar do inicializador
+                        Value* srcElemPtr = builder->CreateGEP(arrayType, initVal, indices, "srcelem");
+                        Value* elemValue = builder->CreateLoad(elemType, srcElemPtr, "loadtmp");
+                        
+                        // Armazenar na variável
+                        Value* dstElemPtr = builder->CreateGEP(arrayType, alloca, indices, "dstelem");
+                        builder->CreateStore(elemValue, dstElemPtr);
+                    }
+                } else {
+                    // Para tipos não-array
+                    builder->CreateStore(initVal, alloca);
+                }
+                return alloca;
+            }
+        }
+        
+        // CORREÇÃO: Sem inicialização, usar tipo declarado
+        AllocaInst* alloca = builder->CreateAlloca(declaredType, nullptr, node->getName());
+        namedValues[node->getName()] = alloca;
+        variableTypes[node->getName()] = declaredType;
+        return alloca;
+    }
+    
     return generateGlobalVariable(node);
 }
 
@@ -751,6 +1334,8 @@ Value* LLVMGenerator::generateExpr(ASTNode* node) {
         return generateWhile(whileNode);
     } else if (auto call = dynamic_cast<CallNode*>(node)) {
         return generateCall(call);
+    } else if (auto arrayAccess = dynamic_cast<ArrayAccessNode*>(node)) {
+        return generateArrayAccess(arrayAccess);
     } else if (auto funcNode = dynamic_cast<FunctionNode*>(node)) {
         generateFunction(funcNode);
         return nullptr;
@@ -1130,6 +1715,10 @@ Value* LLVMGenerator::generateAssign(AssignNode* node) {
     Value* target = nullptr;
     Type* targetType = nullptr;
 
+    if (node->isArrayAccess()) {
+        return generateArrayAssignment(node);
+    }
+
     // Primeiro verificar se é variável local
     if (namedValues.count(identifier)) {
         target = namedValues[identifier];
@@ -1508,7 +2097,18 @@ Type* LLVMGenerator::getLLVMType(const std::string& typeName) {
     if (typeName == "float") return Type::getFloatTy(*context);
     if (typeName == "bool") return Type::getInt1Ty(*context);
     if (typeName == "string") return PointerType::get(Type::getInt8Ty(*context), 0);
-    return Type::getVoidTy(*context);
+    if (typeName == "void") return Type::getVoidTy(*context);
+
+    if (typeName.find("[]") != std::string::npos) {
+        std::string elemType = typeName.substr(0, typeName.find("[]"));
+        Type* elementType = getLLVMType(elemType);
+        if (elementType) {
+            // Retornar ponteiro para o tipo do elemento
+            return PointerType::get(elementType, 0);
+        }
+    }
+    
+    return nullptr;
 }
 
 void LLVMGenerator::dumpIR() const {

@@ -1,0 +1,17 @@
+func main() -> int {
+    total: int = 0;
+    n: int = 50000000;
+    
+    for(i: int = 0; i < n; i = i + 1) {
+        a: float = i * 3.14159;
+        b: float = a / 2.71828;
+        c: float = a + b - i;
+        
+        temp: int = c;
+        modulo: int = temp - (temp / 1000) * 1000;
+        total = total + modulo;
+
+    }
+    
+    return total;
+}

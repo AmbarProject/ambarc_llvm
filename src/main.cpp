@@ -102,6 +102,8 @@ Compilando arquivo: )" << inputFile << "\n" << std::endl;
                 generator.optimizeModule();
                 std::cout << "✅ Otimização concluída (nível aplicado)!" << std::endl;
 
+                generator.analyzeAndReportOptimizationProblems();
+
                 // Dump IR no terminal
                 std::cout << "\n=== CÓDIGO LLVM IR GERADO ===" << std::endl;
                 generator.dumpIR();

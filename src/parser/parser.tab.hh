@@ -60,6 +60,8 @@ extern int yydebug;
 #include "../ast/nodes/expressions/NumberNode.hpp"
 #include "../ast/nodes/expressions/StringNode.hpp"
 #include "../ast/nodes/expressions/UnaryNode.hpp"
+#include "../ast/nodes/expressions/ArrayNode.hpp"
+#include "../ast/nodes/expressions/ArrayAccessNode.hpp"
 
 #include "../ast/nodes/statements/AssignNode.hpp"
 #include "../ast/nodes/statements/BlockNode.hpp"
@@ -74,7 +76,7 @@ extern int yydebug;
 #include "../ast/nodes/declarations/ProgramNode.hpp"
 #include "../ast/nodes/declarations/VarNode.hpp"
 
-#line 78 "parser.tab.hh"
+#line 80 "parser.tab.hh"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -129,7 +131,9 @@ extern int yydebug;
     RPAREN = 299,                  /* RPAREN  */
     LBRACE = 300,                  /* LBRACE  */
     RBRACE = 301,                  /* RBRACE  */
-    UMINUS = 302                   /* UMINUS  */
+    LBRACKET = 302,                /* LBRACKET  */
+    RBRACKET = 303,                /* RBRACKET  */
+    UMINUS = 304                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -138,7 +142,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 53 "parser.y"
+#line 55 "parser.y"
 
     int num;
     float real;
@@ -149,7 +153,7 @@ union YYSTYPE
     std::vector<ambar::ASTNode*>* stmts;
     std::vector<std::pair<std::string, std::string>>* params;
 
-#line 153 "parser.tab.hh"
+#line 157 "parser.tab.hh"
 
 };
 typedef union YYSTYPE YYSTYPE;

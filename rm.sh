@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# A flag -f do rm ignora arquivos inexistentes e não gera erros
 rm -f *.o
 
 cd src/parser
@@ -9,5 +10,3 @@ cd ../..
 cd src/lexer
 rm -f lex.yy.c
 cd ../..
-
-rm -f output

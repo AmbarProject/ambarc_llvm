@@ -66,6 +66,8 @@ WS         [ \t\r\n]+
 ")"             { return RPAREN; }
 "{"             { return LBRACE; }
 "}"             { return RBRACE; }
+"["          { return LBRACKET; }
+"]"          { return RBRACKET; }
 
 \"([^\"\\]|\\.)*\"  {
     std::string raw(yytext);

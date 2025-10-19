@@ -11,6 +11,8 @@
 #include "ast/nodes/expressions/IdentifierNode.hpp"
 #include "ast/nodes/expressions/StringNode.hpp"
 #include "ast/nodes/expressions/CallNode.hpp"
+#include "ast/nodes/expressions/ArrayNode.hpp"
+#include "ast/nodes/expressions/ArrayAccessNode.hpp"
 #include "ast/nodes/expressions/UnaryNode.hpp"
 #include "ast/nodes/statements/AssignNode.hpp"
 #include "ast/nodes/statements/BlockNode.hpp"
@@ -53,6 +55,15 @@
 #include <llvm/Passes/PassPlugin.h>
 #include <llvm/IR/PassManager.h>
 
+#include <llvm/Analysis/CFG.h>
+#include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Analysis/ScalarEvolution.h>
+#include <llvm/Analysis/BranchProbabilityInfo.h>
+#include <llvm/Analysis/BlockFrequencyInfo.h>
+#include <llvm/Analysis/DominanceFrontier.h>
+#include <llvm/Analysis/PostDominators.h>
+
+#include <sstream>
 #include <map>
 #include <memory>
 #include <string>
@@ -60,6 +71,36 @@
 #include <vector> 
 
 namespace ambar {
+
+class OptimizationAnalyzer {
+public:
+    struct ProblematicNode {
+        std::string functionName;
+        std::string blockName;
+        std::string problemType;
+        std::string description;
+        int severity; // 1-10, onde 10 é mais severo
+        llvm::BasicBlock* block;
+    };
+
+    OptimizationAnalyzer(llvm::Module& module) : module(module) {}
+    
+    std::vector<ProblematicNode> analyzeOptimizationProblems();
+    void printProblematicNodes(const std::vector<ProblematicNode>& problems);
+
+private:
+    llvm::Module& module;
+    
+    void analyzeFunction(llvm::Function& F, std::vector<ProblematicNode>& problems);
+    void analyzeBasicBlock(llvm::BasicBlock& BB, llvm::Function& F, 
+                          std::vector<ProblematicNode>& problems);
+    bool hasRedundantComputations(llvm::BasicBlock& BB);
+    bool hasExpensiveOperations(llvm::BasicBlock& BB);
+    bool hasPoorBranchPattern(llvm::BasicBlock& BB);
+    bool hasMemoryInefficiencies(llvm::BasicBlock& BB);
+    bool hasLoopInefficiencies(llvm::BasicBlock& BB, llvm::Function& F);
+    std::string getBlockDescription(llvm::BasicBlock& BB);
+};
 
 // Enum para níveis de otimização
 enum class OptimizationLevel {
@@ -90,7 +131,9 @@ public:
     void dumpIRToFile(const std::string& filename) const;
     
     std::unique_ptr<llvm::Module> module;
-    void optimizeModule(); 
+    void optimizeModule();
+
+    void analyzeAndReportOptimizationProblems();
 private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::IRBuilder<>> builder;
@@ -122,6 +165,9 @@ private:
     llvm::Value* generateVariable(VarNode* node);
     llvm::Value* generateLocalVariable(VarNode* node);
     llvm::Value* generateGlobalVariable(VarNode* node);
+    llvm::Value* generateArrayLiteral(ArrayNode* node);
+    llvm::Value* generateArrayAccess(ArrayAccessNode* node);
+    llvm::Value* generateArrayAssignment(AssignNode* node);
     bool isGlobalContext() const { return currentFunction == nullptr; }
     void generateMainFunction(std::unique_ptr<ASTNode>& astRoot);
     
@@ -144,14 +190,18 @@ private:
     llvm::Value* generateReturn(ReturnNode* node);
     llvm::Value* generateWhile(WhileNode* node);
     llvm::Value* generateCall(CallNode* node);
-    
+  
     void pushLoopBlocks(llvm::BasicBlock* breakBlock, llvm::BasicBlock* continueBlock); 
     void popLoopBlocks();
     
     // Utilitários
     llvm::Type* getLLVMType(const std::string& typeName);
+    llvm::Type* getArrayElementType(llvm::Type* arrayType);
+
     void handleGlobalVariables(ProgramNode* program);
     llvm::GlobalVariable* createStringLiteral(const std::string& value);
+
+    void performAdvancedOptimizationAnalysis();
 };
 
 } // namespace ambar
