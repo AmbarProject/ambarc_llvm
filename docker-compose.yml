@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   ambar-compiler:
     build:
@@ -6,22 +7,21 @@ services:
       dockerfile: Dockerfile
     container_name: ambar-compiler
     volumes:
-      - ./src:/app/src
-      - ./include:/app/include
-      - ./output:/app/output
-      - ./compile.sh:/app/compile.sh
-    working_dir: /app
+      - ./src:/home/developer/ambar/src
+      - ./include:/home/developer/ambar/include
+      - ./output:/home/developer/ambar/output
+    working_dir: /home/developer/ambar
     stdin_open: true
     tty: true
-  
+
   ambar-dev:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: ambar-dev
     volumes:
-      - .:/app
-    working_dir: /app
+      - .:/home/developer/ambar
+    working_dir: /home/developer/ambar
     command: /bin/bash
     stdin_open: true
     tty: true
