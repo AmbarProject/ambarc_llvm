@@ -37,14 +37,10 @@ detect_platform() {
 
 PLATFORM=$(detect_platform)
 BINARY_NAME="ambar-${PLATFORM}"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="$HOME/.local/bin"
 
-# Verificar se é root para instalação global
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${YELLOW}⚠️  Executando como usuário normal. Instalando em ~/.local/bin${NC}"
-  INSTALL_DIR="$HOME/.local/bin"
-  mkdir -p "$INSTALL_DIR"
-fi
+# Criar diretório de instalação
+mkdir -p "$INSTALL_DIR"
 
 # Download do binário
 echo -e "📦 Baixando Ambar Compiler para ${PLATFORM}..."
@@ -72,26 +68,46 @@ chmod +x "/tmp/${BINARY_NAME}"
 echo -e "🔧 Instalando em ${INSTALL_DIR}..."
 cp "/tmp/${BINARY_NAME}" "${INSTALL_DIR}/ambar"
 
+# Verificar se está no PATH
+add_to_path() {
+  local shell_rc=""
+  if [ -n "$BASH_VERSION" ]; then
+    shell_rc="$HOME/.bashrc"
+  elif [ -n "$ZSH_VERSION" ]; then
+    shell_rc="$HOME/.zshrc"
+  else
+    shell_rc="$HOME/.profile"
+  fi
+
+  if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo -e "${YELLOW}⚠️  Adicionando $INSTALL_DIR ao PATH em $shell_rc${NC}"
+    echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >>"$shell_rc"
+    echo -e "${GREEN}✅ PATH atualizado. Execute: source $shell_rc${NC}"
+  fi
+}
+
+# Adicionar ao PATH
+add_to_path
+
 # Verificar instalação
-if command -v ambar &>/dev/null; then
+if [ -f "${INSTALL_DIR}/ambar" ]; then
   echo -e "${GREEN}✅ Ambar Compiler instalado com sucesso!${NC}"
   echo -e "📝 Use: ${YELLOW}ambar -O2 arquivo.amb${NC}"
 
   # Mostrar versão
   echo -e "\nℹ️  Verificando instalação:"
-  ambar --version
+  "${INSTALL_DIR}/ambar" --version
+
+  echo -e "\n${YELLOW}⚠️  IMPORTANTE:${NC}"
+  echo -e "Execute o comando abaixo ou reinicie o terminal:"
+  echo -e "${GREEN}source ~/.bashrc${NC} (ou ~/.zshrc)"
 else
-  # Adicionar ao PATH se necessário
-  if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo -e "${YELLOW}⚠️  Adicione ao seu .bashrc/.zshrc:${NC}"
-    echo "export PATH=\"\$PATH:${INSTALL_DIR}\""
-  fi
-  echo -e "${GREEN}✅ Instalação completa! Reinicie o terminal ou execute:${NC}"
-  echo "export PATH=\"\$PATH:${INSTALL_DIR}\""
+  echo -e "${RED}❌ Erro na instalação${NC}"
+  exit 1
 fi
 
 # Limpar
 rm -f "/tmp/${BINARY_NAME}"
 
-echo -e "\n🎉 Pronto! Comece a compilar:"
+echo -e "\n🎉 Pronto! Após reiniciar o terminal, comece a compilar:"
 echo "ambar -O2 exemplos/hello.amb"
