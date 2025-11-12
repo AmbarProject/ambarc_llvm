@@ -1,125 +1,152 @@
-# Ambar Compiler (ambarc)
+# 🧠 Ambar Compiler — Ambiente Docker
 
-Um compilador moderno para a linguagem Ambar, construído com C++17, Bison, Flex e LLVM.
-
-## 📋 Pré-requisitos
-
-### Dependências Principais
-- **C++ Compiler** (GCC 7+ ou Clang 6+)
-- **Bison** 3.0+
-- **Flex** 2.6+
-- **LLVM** 10.0+
-- **CMake** 3.15+ (opcional, para build automatizado)
+Este projeto fornece um ambiente completo e isolado via **Docker** para compilar e executar o compilador **Ambar**, garantindo compatibilidade entre sistemas operacionais.
 
 ---
 
-## 🛠️ Instalação das Ferramentas
+## 🚀 Requisitos
+
+- **Docker** instalado (versão 24 ou superior)
+- **Git** instalado
+
+---
+
+## 🧩 Instalação do Docker
 
 ### 🐧 Linux (Ubuntu/Debian)
 
 ```bash
-# Atualizar repositórios
 sudo apt update
+sudo apt install -y ca-certificates curl gnupg lsb-release
 
-# Instalar ferramentas de build
-sudo apt install build-essential cmake git
+# Adiciona o repositório oficial do Docker
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-# Instalar Bison e Flex
-sudo apt install bison flex
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Instalar LLVM
-sudo apt install llvm-dev llvm-runtime llvm
+# Instala o Docker
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# Verificar versões instaladas
-gcc --version
-bison --version
-flex --version
-llvm-config --version
-```
+# Verifica se está funcionando
+sudo docker --version
+````
 
-### 🐧 Linux (CentOS/RHEL/Fedora)
+---
+
+### 🍎 MacOS (via Terminal)
 
 ```bash
-# CentOS/RHEL
-sudo yum groupinstall "Development Tools"
-sudo yum install bison flex llvm-devel
-
-# Fedora
-sudo dnf groupinstall "Development Tools"
-sudo dnf install bison flex llvm-devel cmake
-```
-
-### 🍎 macOS
-
-#### Usando Homebrew (Recomendado)
-```bash
-# Instalar Homebrew (se não tiver)
+# Instala o Homebrew se ainda não tiver
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Instalar dependências
-brew install cmake git
-brew install bison flex
-brew install llvm
+# Instala o Docker Desktop
+brew install --cask docker
 
-# Adicionar ao PATH (adicione ao seu .zshrc ou .bash_profile)
-export PATH="/opt/homebrew/opt/bison/bin:$PATH"
-export PATH="/opt/homebrew/opt/flex/bin:$PATH"
-export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+# Inicie o Docker Desktop manualmente (necessário na primeira execução)
+open /Applications/Docker.app
 ```
-
-#### Usando MacPorts
-```bash
-sudo port install bison flex llvm-10 cmake
-```
-
-### 🪟 Windows
-
-#### Opção 1: WSL2 (Recomendado)
-```bash
-# Instalar WSL2
-wsl --install
-
-# Seguir instruções do Linux Ubuntu acima
-```
-
-#### Opção 2: MSYS2/MinGW-w64
-```bash
-# Instalar MSYS2 de https://www.msys2.org/
-
-# No terminal MSYS2
-pacman -S mingw-w64-x86_64-gcc
-pacman -S mingw-w64-x86_64-cmake
-pacman -S mingw-w64-x86_64-bison
-pacman -S mingw-w64-x86_64-flex
-pacman -S mingw-w64-x86_64-llvm
-```
-
-#### Opção 3: Visual Studio + vcpkg
-```cmd
-# Instalar vcpkg
-git clone https://github.com/Microsoft/vcpkg.git
-cd vcpkg
-.\bootstrap-vcpkg.bat
-
-# Instalar dependências
-.\vcpkg install llvm:x64-windows
-.\vcpkg install flex-bison:x64-windows
-```
----
-
-## 📚 Recursos Adicionais
-
-- **Documentação LLVM**: https://llvm.org/docs/
-- **Manual Bison**: https://www.gnu.org/software/bison/manual/
-- **Manual Flex**: https://github.com/westes/flex
-- **Exemplos**: Veja a pasta `examples/` para programas de exemplo
 
 ---
 
-## 🤝 Contribuindo
+### 🪟 Windows (via PowerShell)
 
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+Execute como **Administrador**:
+
+```powershell
+# Baixa e instala o Docker Desktop
+Invoke-WebRequest -UseBasicParsing -Uri "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe" -OutFile "DockerInstaller.exe"
+Start-Process -Wait -FilePath ".\DockerInstaller.exe" -ArgumentList "install", "--quiet"
+
+# Reinicie o sistema após a instalação
+Restart-Computer
+```
+
+Após reiniciar, abra o **Docker Desktop** e certifique-se de que ele esteja rodando.
+
+---
+
+## 🧬 Clonando o Projeto
+
+```bash
+git clone https://github.com/AmbarProject/ambarc_llvm.git
+cd ambarc_llvm
+```
+
+---
+
+## 🧱 Build da Imagem Docker
+
+```bash
+docker build -t ambar:latest .
+```
+
+---
+
+## 🐋 Executando o Container
+
+```bash
+# Linux / macOs
+docker run -it --rm -v $(pwd):/workspace ambar:latest
+
+# Windows
+docker run -it --rm -v "%cd%":/workspace ambar:latest
+
+```
+
+> 🔹 Isso monta o diretório atual (`$(pwd)`) dentro do container no caminho `/workspace`, permitindo editar os arquivos localmente e compilar dentro do Docker.
+
+---
+
+## ⚙️ Compilando com o Ambar
+
+Dentro do container, rode:
+
+```bash
+./compile.sh
+```
+
+> Esse script compila o código-fonte Ambar e gera o arquivo LLVM (`.ll`) correspondente.
+
+---
+
+## 🧾 Estrutura de Pastas
+
+```
+├── src/                # Código-fonte principal do compilador
+├── include/            # Cabeçalhos (headers)
+├── Dockerfile          # Configuração do ambiente Docker
+├── compile.sh          # Script de compilação
+├── ir.sh               # Geração de código LLVM IR
+└── test.amb            # Código de teste para o compilador
+```
+
+---
+
+## 🧠 Dicas Úteis
+
+* Para sair do container:
+
+  ```bash
+  exit
+  ```
+* Para rebuildar completamente a imagem (limpando cache):
+
+  ```bash
+  docker build --no-cache -t ambar:latest .
+  ```
+* Para acessar o shell do container:
+
+  ```bash
+  docker run -it ambar:latest /bin/bash
+  ```
+
+---
+
+## 📜 Licença
+
+Este projeto é distribuído sob a licença **MIT**.
