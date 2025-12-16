@@ -1,8 +1,7 @@
 #include <iostream>
 #include <cstdio>
-#include <fstream>
-#include <memory>
 #include <string>
+#include <memory>
 
 #include "ast/nodes/ASTNode.hpp"
 #include "LLVMGenerator.hpp"
@@ -12,7 +11,6 @@ extern "C" {
     extern FILE* yyin;
 }
 
-// Correção: usar o namespace ambar e a declaração correta
 namespace ambar {
     extern std::unique_ptr<ASTNode> astRoot;
 }
@@ -30,51 +28,19 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
-        if (arg == "-O0") {
-            optLevel = ambar::OptimizationLevel::O0;
-        } else if (arg == "-O1") {
-            optLevel = ambar::OptimizationLevel::O1;
-        } else if (arg == "-O2") {
-            optLevel = ambar::OptimizationLevel::O2;
-        } else if (arg == "-O3") {
-            optLevel = ambar::OptimizationLevel::O3;
-        } else if (arg == "-Os") {
-            optLevel = ambar::OptimizationLevel::Os;
-        } else if (arg == "-Oz") {
-            optLevel = ambar::OptimizationLevel::Oz;
-        } else if (arg.find(".amb") != std::string::npos) {
-            inputFile = arg;
-        }
+        if (arg == "-O0") optLevel = ambar::OptimizationLevel::O0;
+        else if (arg == "-O1") optLevel = ambar::OptimizationLevel::O1;
+        else if (arg == "-O2") optLevel = ambar::OptimizationLevel::O2;
+        else if (arg == "-O3") optLevel = ambar::OptimizationLevel::O3;
+        else if (arg == "-Os") optLevel = ambar::OptimizationLevel::Os;
+        else if (arg == "-Oz") optLevel = ambar::OptimizationLevel::Oz;
+        else if (arg.find(".amb") != std::string::npos) inputFile = arg;
     }
 
     if (inputFile.empty()) {
         std::cerr << "Erro: Nenhum arquivo .amb especificado" << std::endl;
         return 1;
     }
-
-    // ===== ASCII Art inicial =====
-    std::cout << R"(                                                                                                         
-              @@                                                                                                            
-              @@                                                                                                            
-              @@@                                                                                                           
-           @@  @@@                                                                                                          
-          @@@@  @@@                                                                                                         
-           @@@@  @@@                                                                                                        
-            @@@@  @@@                                                                                                       
-             @@@@  @@@           @@@@@@       @@@@@@  @@@@@@@@@@@@         @@@@@@@       @@@@@@@@@@@        @@@@@@@@@       
-              @@@@  @@@          @@@@@@@     @@@@@@@  @@@@@@@@@@@@@@      @@@@@@@@       @@@@@@@@@@@@@    @@@@@@@@@@@@@     
-               @@@   @@@         @@@@@@@     @@@@@@@  @@@@@    @@@@@      @@@@@@@@@      @@@@    @@@@@   @@@@@     @@@@@    
-                @@@   @@@        @@@@@@@@   @@@@@@@@  @@@@@   @@@@@      @@@@@ @@@@@     @@@@    @@@@@  @@@@@               
-    @@@@@@@@@@@@@@@@   @@@       @@@@ @@@@ @@@@ @@@@  @@@@@@@@@@@@      @@@@@  @@@@@     @@@@@@@@@@@@@  @@@@@               
-   @@@@@@@@@@@@@@@@@@  @@@@      @@@@ @@@@@@@@  @@@@  @@@@@    @@@@@    @@@@@@@@@@@@@    @@@@@@@@@@@    @@@@@               
-                        @@@@     @@@@  @@@@@@@  @@@@  @@@@@    @@@@@@  @@@@@@@@@@@@@@@   @@@@  @@@@@     @@@@@     @@@@@    
- @@@@@@@@@@@@@@@@@@@@@@@@@@@@    @@@@   @@@@@   @@@@  @@@@@@@@@@@@@@  @@@@@      @@@@@   @@@@   @@@@@     @@@@@@@@@@@@@     
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   @@@@    @@@    @@@@  @@@@@@@@@@@@    @@@@@       @@@@@  @@@@    @@@@@      @@@@@@@@@       
-                                                                                                                            
-              
-Welcome to Ambar Compiler (v0.1).
-
-Compilando arquivo: )" << inputFile << "\n" << std::endl;
 
     yyin = fopen(inputFile.c_str(), "r");
     if (!yyin) {
@@ -83,55 +49,42 @@ Compilando arquivo: )" << inputFile << "\n" << std::endl;
     }
 
     int result = yyparse();
-
-    if (result == 0) {
-        std::cout << "✅ Análise sintática concluída com sucesso!" << std::endl;
-
-        if (ambar::astRoot) {
-            std::cout << "✅ AST construída com sucesso!" << std::endl;
-
-            try {
-                // Criar gerador LLVM com nível de otimização
-                ambar::LLVMGenerator generator(optLevel);
-
-                // Gera o IR
-                generator.generate(ambar::astRoot);
-                std::cout << "✅ Geração de código LLVM IR concluída!" << std::endl;
-
-                // Otimiza
-                generator.optimizeModule();
-                std::cout << "✅ Otimização concluída (nível aplicado)!" << std::endl;
-
-                generator.analyzeAndReportOptimizationProblems();
-
-                // Dump IR no terminal
-                std::cout << "\n=== CÓDIGO LLVM IR GERADO ===" << std::endl;
-                generator.dumpIR();
-
-                // Salvar em arquivo .ll
-                std::string x = inputFile.substr(0, inputFile.find_last_of('.'));
-                std::string outputFile = x + ".ll";
-                generator.dumpIRToFile(outputFile);
-                std::cout << "✅ IR salvo em: " << outputFile << std::endl;
-
-            } catch (const std::exception &e) {
-                std::cerr << "❌ Erro durante a geração de código: " << e.what() << std::endl;
-                return 1;
-            }
-
-        } else {
-            std::cerr << "❌ AST não foi construída." << std::endl;
-            return 1;
-        }
-    } else {
+    if (result != 0) {
         std::cerr << "❌ Erro na análise sintática." << std::endl;
+        if (yyin && yyin != stdin) fclose(yyin);
         return result;
     }
 
-    if (yyin && yyin != stdin) {
-        fclose(yyin);
+    if (!ambar::astRoot) {
+        std::cerr << "❌ AST não foi construída." << std::endl;
+        if (yyin && yyin != stdin) fclose(yyin);
+        return 1;
     }
+
+    try {
+        // Criar gerador LLVM com nível de otimização
+        ambar::LLVMGenerator generator(optLevel);
+
+        // Gera o IR
+        generator.generate(ambar::astRoot);
+
+        // Otimiza
+        generator.optimizeModule();
+
+        generator.analyzeAndReportOptimizationProblems();
+
+        // Salvar em arquivo .ll
+        std::string x = inputFile.substr(0, inputFile.find_last_of('.'));
+        std::string outputFile = x + ".ll";
+        generator.dumpIRToFile(outputFile);
+
+    } catch (const std::exception &e) {
+        std::cerr << "❌ Erro durante a geração de código: " << e.what() << std::endl;
+        if (yyin && yyin != stdin) fclose(yyin);
+        return 1;
+    }
+
+    if (yyin && yyin != stdin) fclose(yyin);
 
     return 0;
 }
-

@@ -1,16 +1,17 @@
+# Base
 FROM ubuntu:22.04
 
 # Evita prompts interativos durante a instalação
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instala dependências básicas do sistema e ferramentas de build
+# Atualiza o sistema e instala dependências básicas
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    software-properties-common \
     wget \
     curl \
     gnupg \
     lsb-release \
-    software-properties-common \
+    build-essential \
     flex \
     bison \
     gcc \
@@ -19,27 +20,34 @@ RUN apt-get update && apt-get install -y \
     bash \
     vim \
     git \
-    lld && \
+    lld \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Adiciona PPA para obter libstdc++ atualizada (GCC 13)
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test -y && \
+    apt-get update && \
+    apt-get install -y libstdc++6 && \
     rm -rf /var/lib/apt/lists/*
 
-# Instala LLVM 17 e Clang 17 do repositório oficial apt.llvm.org
+# Instala LLVM 18.1.3 via llvm.sh
 RUN wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
-    ./llvm.sh 17 && \
+    ./llvm.sh 18 && \
     rm llvm.sh
 
-# Define variáveis de ambiente para LLVM 17
-ENV LLVM_DIR=/usr/lib/llvm-17
+# Define variáveis de ambiente para LLVM 18
+ENV LLVM_DIR=/usr/lib/llvm-18
 ENV PATH=$LLVM_DIR/bin:$PATH
 ENV LD_LIBRARY_PATH=$LLVM_DIR/lib:$LD_LIBRARY_PATH
 
-# Cria diretório de trabalho padrão
+# Diretório de trabalho
 WORKDIR /workspace
 
-# Copia o script de compilação para o container
+# Copia scripts do projeto
 COPY compile.sh /workspace/compile.sh
 RUN chmod +x /workspace/compile.sh
 
-# Mantém o container ocioso no workspace
+# Comando padrão ao iniciar o container
 CMD ["bash"]
 

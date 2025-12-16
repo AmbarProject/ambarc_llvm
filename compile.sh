@@ -90,11 +90,6 @@ src_dir=$(dirname "$1")
 filename=$(basename "$1" .amb)
 original_dir=$(pwd)
 
-echo "📂 Diretório original: $original_dir"
-echo "📂 Diretório do arquivo: $src_dir"
-echo "🔨 Arquivo: $filename.amb"
-echo "⚡ Otimização: -O$OPT_LEVEL"
-
 # Salvar diretório atual para voltar depois
 SCRIPT_DIR=$(pwd)
 
@@ -103,8 +98,6 @@ cd "$src_dir" || {
   echo "Erro: Não foi possível entrar no diretório '$src_dir'"
   exit 1
 }
-
-echo "📂 Compilando em: $(pwd)"
 
 # Voltar para o diretório do script para executar o compilador
 cd "$SCRIPT_DIR" || {
@@ -120,8 +113,7 @@ if [[ ! -f "main.o" || ! -f "lex.yy.o" || ! -f "parser.tab.o" || ! -f "LLVMGener
 fi
 
 # Executar o compilador com nível de otimização
-echo "🚀 Gerando código IR..."
-./ambar "-O$OPT_LEVEL" "$src_dir/$filename.amb"
+./ambar "-$OPT_LEVEL" "$src_dir/$filename.amb"
 
 # Verificar se o arquivo .ll foi gerado no diretório correto
 if [ ! -f "$src_dir/$filename.ll" ]; then
@@ -146,39 +138,23 @@ cd "$src_dir" || {
 }
 
 # Compilar IR para objeto
-echo "🔨 Compilando IR para objeto..."
 llc "-O$OPT_LEVEL" -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$filename.ll" -o "$filename.o"
 
 # Linkar
-echo "🔗 Linkando executável..."
 gcc -no-pie "$filename.o" -o "$filename"
 
 # Tornar executável
 chmod +x "$filename"
 
-echo "✅ Executável gerado: $filename"
-echo "🚀 Executando programa..."
-echo "=========================================="
-
-# Executar o programa
-./"$filename"
-EXIT_CODE=$?
-
-echo "=========================================="
-echo "📊 Programa finalizado com código: $EXIT_CODE"
-
 # Limpeza de arquivos temporários
-echo "🧹 Limpando arquivos temporários..."
 if [ "$KEEP_IR" = false ]; then
   rm -f "$filename.ll"
-  echo "✅ Removido: $filename.ll"
 else
   echo "💾 Mantido: $filename.ll"
 fi
 
 if [ "$KEEP_OBJ" = false ]; then
   rm -f "$filename.o"
-  echo "✅ Removido: $filename.o"
 else
   echo "💾 Mantido: $filename.o"
 fi
