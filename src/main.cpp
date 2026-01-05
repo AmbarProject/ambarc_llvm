@@ -52,30 +52,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // ===== ASCII Art inicial =====
-    std::cout << R"(                                                                                                         
-              @@                                                                                                            
-              @@                                                                                                            
-              @@@                                                                                                           
-           @@  @@@                                                                                                          
-          @@@@  @@@                                                                                                         
-           @@@@  @@@                                                                                                        
-            @@@@  @@@                                                                                                       
-             @@@@  @@@           @@@@@@       @@@@@@  @@@@@@@@@@@@         @@@@@@@       @@@@@@@@@@@        @@@@@@@@@       
-              @@@@  @@@          @@@@@@@     @@@@@@@  @@@@@@@@@@@@@@      @@@@@@@@       @@@@@@@@@@@@@    @@@@@@@@@@@@@     
-               @@@   @@@         @@@@@@@     @@@@@@@  @@@@@    @@@@@      @@@@@@@@@      @@@@    @@@@@   @@@@@     @@@@@    
-                @@@   @@@        @@@@@@@@   @@@@@@@@  @@@@@   @@@@@      @@@@@ @@@@@     @@@@    @@@@@  @@@@@               
-    @@@@@@@@@@@@@@@@   @@@       @@@@ @@@@ @@@@ @@@@  @@@@@@@@@@@@      @@@@@  @@@@@     @@@@@@@@@@@@@  @@@@@               
-   @@@@@@@@@@@@@@@@@@  @@@@      @@@@ @@@@@@@@  @@@@  @@@@@    @@@@@    @@@@@@@@@@@@@    @@@@@@@@@@@    @@@@@               
-                        @@@@     @@@@  @@@@@@@  @@@@  @@@@@    @@@@@@  @@@@@@@@@@@@@@@   @@@@  @@@@@     @@@@@     @@@@@    
- @@@@@@@@@@@@@@@@@@@@@@@@@@@@    @@@@   @@@@@   @@@@  @@@@@@@@@@@@@@  @@@@@      @@@@@   @@@@   @@@@@     @@@@@@@@@@@@@     
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   @@@@    @@@    @@@@  @@@@@@@@@@@@    @@@@@       @@@@@  @@@@    @@@@@      @@@@@@@@@       
-                                                                                                                            
-              
-Welcome to Ambar Compiler (v0.1).
-
-Compilando arquivo: )" << inputFile << "\n" << std::endl;
-
     yyin = fopen(inputFile.c_str(), "r");
     if (!yyin) {
         std::cerr << "Erro ao abrir o arquivo: " << inputFile << std::endl;
@@ -85,10 +61,8 @@ Compilando arquivo: )" << inputFile << "\n" << std::endl;
     int result = yyparse();
 
     if (result == 0) {
-        std::cout << "✅ Análise sintática concluída com sucesso!" << std::endl;
 
         if (ambar::astRoot) {
-            std::cout << "✅ AST construída com sucesso!" << std::endl;
 
             try {
                 // Criar gerador LLVM com nível de otimização
@@ -96,23 +70,19 @@ Compilando arquivo: )" << inputFile << "\n" << std::endl;
 
                 // Gera o IR
                 generator.generate(ambar::astRoot);
-                std::cout << "✅ Geração de código LLVM IR concluída!" << std::endl;
 
                 // Otimiza
                 generator.optimizeModule();
-                std::cout << "✅ Otimização concluída (nível aplicado)!" << std::endl;
 
-                generator.analyzeAndReportOptimizationProblems();
+                // generator.analyzeAndReportOptimizationProblems();
 
                 // Dump IR no terminal
-                std::cout << "\n=== CÓDIGO LLVM IR GERADO ===" << std::endl;
-                generator.dumpIR();
+                // generator.dumpIR();
 
                 // Salvar em arquivo .ll
                 std::string x = inputFile.substr(0, inputFile.find_last_of('.'));
                 std::string outputFile = x + ".ll";
                 generator.dumpIRToFile(outputFile);
-                std::cout << "✅ IR salvo em: " << outputFile << std::endl;
 
             } catch (const std::exception &e) {
                 std::cerr << "❌ Erro durante a geração de código: " << e.what() << std::endl;
@@ -124,7 +94,6 @@ Compilando arquivo: )" << inputFile << "\n" << std::endl;
             return 1;
         }
     } else {
-        std::cerr << "❌ Erro na análise sintática." << std::endl;
         return result;
     }
 

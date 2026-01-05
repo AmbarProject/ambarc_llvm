@@ -47,6 +47,8 @@ extern int yydebug;
 /* "%code requires" blocks.  */
 #line 1 "parser.y"
 
+
+#include <stdio.h>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -76,7 +78,7 @@ extern int yydebug;
 #include "../ast/nodes/declarations/ProgramNode.hpp"
 #include "../ast/nodes/declarations/VarNode.hpp"
 
-#line 80 "parser.tab.hh"
+#line 82 "parser.tab.hh"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -142,7 +144,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 55 "parser.y"
+#line 57 "parser.y"
 
     int num;
     float real;
@@ -153,7 +155,7 @@ union YYSTYPE
     std::vector<ambar::ASTNode*>* stmts;
     std::vector<std::pair<std::string, std::string>>* params;
 
-#line 157 "parser.tab.hh"
+#line 159 "parser.tab.hh"
 
 };
 typedef union YYSTYPE YYSTYPE;

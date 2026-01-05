@@ -1,4 +1,6 @@
 %code requires {
+
+#include <stdio.h>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -566,7 +568,7 @@ func_call:
 %%
 
 void yyerror(const char* s) {
-    fprintf(stderr, "Parse error at line %d: %s\n", yylineno, s);
+    printf("Parse error at line %d: %s", yylineno, s);
 }
 
 void cleanup() {

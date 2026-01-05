@@ -67,7 +67,7 @@
 
 
 /* First part of user prologue.  */
-#line 32 "parser.y"
+#line 34 "parser.y"
 
 #include <cstdio>
 #include <memory>
@@ -595,16 +595,16 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,   102,   102,   115,   120,   130,   131,   132,   136,   140,
-     146,   152,   162,   183,   184,   188,   194,   203,   204,   205,
-     206,   207,   208,   213,   221,   222,   223,   224,   225,   226,
-     227,   228,   229,   230,   234,   239,   255,   259,   263,   270,
-     277,   288,   298,   304,   313,   324,   325,   326,   327,   331,
-     332,   336,   348,   355,   362,   366,   381,   385,   392,   393,
-     397,   398,   402,   406,   407,   415,   426,   427,   431,   435,
-     439,   443,   447,   454,   455,   459,   466,   467,   471,   475,
-     482,   483,   484,   485,   486,   487,   488,   489,   490,   491,
-     492,   493,   497,   521,   530,   534,   541,   552
+       0,   104,   104,   117,   122,   132,   133,   134,   138,   142,
+     148,   154,   164,   185,   186,   190,   196,   205,   206,   207,
+     208,   209,   210,   215,   223,   224,   225,   226,   227,   228,
+     229,   230,   231,   232,   236,   241,   257,   261,   265,   272,
+     279,   290,   300,   306,   315,   326,   327,   328,   329,   333,
+     334,   338,   350,   357,   364,   368,   383,   387,   394,   395,
+     399,   400,   404,   408,   409,   417,   428,   429,   433,   437,
+     441,   445,   449,   456,   457,   461,   468,   469,   473,   477,
+     484,   485,   486,   487,   488,   489,   490,   491,   492,   493,
+     494,   495,   499,   523,   532,   536,   543,   554
 };
 #endif
 
@@ -1296,7 +1296,7 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* program: decl_list  */
-#line 102 "parser.y"
+#line 104 "parser.y"
               {
         if ((yyvsp[0].node) == nullptr) {
             auto prog = std::make_unique<ambar::ProgramNode>();
@@ -1311,7 +1311,7 @@ yyreduce:
     break;
 
   case 3: /* decl_list: decl  */
-#line 115 "parser.y"
+#line 117 "parser.y"
            {
           auto p = std::make_unique<ambar::ProgramNode>();
           if ((yyvsp[0].node)) p->addDeclaration(std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
@@ -1321,7 +1321,7 @@ yyreduce:
     break;
 
   case 4: /* decl_list: decl_list decl  */
-#line 120 "parser.y"
+#line 122 "parser.y"
                      {
           ambar::ProgramNode* p = dynamic_cast<ambar::ProgramNode*>((yyvsp[-1].node));
           if (p && (yyvsp[0].node)) {
@@ -1333,31 +1333,31 @@ yyreduce:
     break;
 
   case 5: /* decl: import_decl  */
-#line 130 "parser.y"
+#line 132 "parser.y"
                           { (yyval.node) = nullptr; }
 #line 1339 "parser.tab.cc"
     break;
 
   case 6: /* decl: func_decl  */
-#line 131 "parser.y"
+#line 133 "parser.y"
                           { (yyval.node) = (yyvsp[0].node); }
 #line 1345 "parser.tab.cc"
     break;
 
   case 7: /* decl: stmt  */
-#line 132 "parser.y"
+#line 134 "parser.y"
                           { (yyval.node) = (yyvsp[0].node); }
 #line 1351 "parser.tab.cc"
     break;
 
   case 8: /* import_decl: IMPORT IDENTIFIER ARROW IDENTIFIER SEMI  */
-#line 136 "parser.y"
+#line 138 "parser.y"
                                             { (yyval.node) = nullptr; }
 #line 1357 "parser.tab.cc"
     break;
 
   case 9: /* var_decl: IDENTIFIER COLON type ASSIGN expr SEMI  */
-#line 140 "parser.y"
+#line 142 "parser.y"
                                              { 
           auto var = std::make_unique<ambar::VarNode>(std::string((yyvsp[-5].id)), *(yyvsp[-3].str), std::unique_ptr<ambar::ASTNode>((yyvsp[-1].node)));
           delete (yyvsp[-3].str);
@@ -1368,7 +1368,7 @@ yyreduce:
     break;
 
   case 10: /* var_decl: IDENTIFIER COLON type SEMI  */
-#line 146 "parser.y"
+#line 148 "parser.y"
                                  { 
           auto var = std::make_unique<ambar::VarNode>(std::string((yyvsp[-3].id)), *(yyvsp[-1].str), nullptr);
           delete (yyvsp[-1].str);
@@ -1379,7 +1379,7 @@ yyreduce:
     break;
 
   case 11: /* var_decl: IDENTIFIER COLON type ASSIGN array_literal SEMI  */
-#line 152 "parser.y"
+#line 154 "parser.y"
                                                       {
           // CORREÇÃO: Usar o array_literal diretamente
           auto var = std::make_unique<ambar::VarNode>(std::string((yyvsp[-5].id)), *(yyvsp[-3].str), std::unique_ptr<ambar::ASTNode>((yyvsp[-1].node)));
@@ -1391,7 +1391,7 @@ yyreduce:
     break;
 
   case 12: /* func_decl: FUNC IDENTIFIER LPAREN opt_params RPAREN ARROW type block  */
-#line 162 "parser.y"
+#line 164 "parser.y"
                                                               {
         std::vector<std::pair<std::string, std::string>> params_vec;
         if ((yyvsp[-4].params) != nullptr) {
@@ -1414,19 +1414,19 @@ yyreduce:
     break;
 
   case 13: /* opt_params: %empty  */
-#line 183 "parser.y"
+#line 185 "parser.y"
                   { (yyval.params) = nullptr; }
 #line 1420 "parser.tab.cc"
     break;
 
   case 14: /* opt_params: params  */
-#line 184 "parser.y"
+#line 186 "parser.y"
              { (yyval.params) = (yyvsp[0].params); }
 #line 1426 "parser.tab.cc"
     break;
 
   case 15: /* params: IDENTIFIER COLON type  */
-#line 188 "parser.y"
+#line 190 "parser.y"
                             {
           (yyval.params) = new std::vector<std::pair<std::string, std::string>>();
           (yyval.params)->push_back({*(yyvsp[0].str), std::string((yyvsp[-2].id))});
@@ -1437,7 +1437,7 @@ yyreduce:
     break;
 
   case 16: /* params: params COMMA IDENTIFIER COLON type  */
-#line 194 "parser.y"
+#line 196 "parser.y"
                                          {
           (yyvsp[-4].params)->push_back({*(yyvsp[0].str), std::string((yyvsp[-2].id))});
           delete (yyvsp[0].str); 
@@ -1448,37 +1448,37 @@ yyreduce:
     break;
 
   case 17: /* type: INT  */
-#line 203 "parser.y"
+#line 205 "parser.y"
               { (yyval.str) = new std::string("int"); }
 #line 1454 "parser.tab.cc"
     break;
 
   case 18: /* type: FLOAT  */
-#line 204 "parser.y"
+#line 206 "parser.y"
               { (yyval.str) = new std::string("float"); }
 #line 1460 "parser.tab.cc"
     break;
 
   case 19: /* type: BOOL  */
-#line 205 "parser.y"
+#line 207 "parser.y"
               { (yyval.str) = new std::string("bool"); }
 #line 1466 "parser.tab.cc"
     break;
 
   case 20: /* type: STRING_T  */
-#line 206 "parser.y"
+#line 208 "parser.y"
               { (yyval.str) = new std::string("string"); }
 #line 1472 "parser.tab.cc"
     break;
 
   case 21: /* type: VOID  */
-#line 207 "parser.y"
+#line 209 "parser.y"
               { (yyval.str) = new std::string("void"); }
 #line 1478 "parser.tab.cc"
     break;
 
   case 22: /* type: type LBRACKET NUM_INT RBRACKET  */
-#line 208 "parser.y"
+#line 210 "parser.y"
                                    { 
         std::string arrayType = *(yyvsp[-3].str) + "[]"; 
         delete (yyvsp[-3].str);
@@ -1488,7 +1488,7 @@ yyreduce:
     break;
 
   case 23: /* type: type LBRACKET RBRACKET  */
-#line 213 "parser.y"
+#line 215 "parser.y"
                            { 
         std::string arrayType = *(yyvsp[-2].str) + "[]"; 
         delete (yyvsp[-2].str);
@@ -1498,67 +1498,67 @@ yyreduce:
     break;
 
   case 24: /* stmt: assign_stmt  */
-#line 221 "parser.y"
+#line 223 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1504 "parser.tab.cc"
     break;
 
   case 25: /* stmt: call_stmt  */
-#line 222 "parser.y"
+#line 224 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1510 "parser.tab.cc"
     break;
 
   case 26: /* stmt: return_stmt  */
-#line 223 "parser.y"
+#line 225 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1516 "parser.tab.cc"
     break;
 
   case 27: /* stmt: if_stmt  */
-#line 224 "parser.y"
+#line 226 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1522 "parser.tab.cc"
     break;
 
   case 28: /* stmt: while_stmt  */
-#line 225 "parser.y"
+#line 227 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1528 "parser.tab.cc"
     break;
 
   case 29: /* stmt: for_stmt  */
-#line 226 "parser.y"
+#line 228 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1534 "parser.tab.cc"
     break;
 
   case 30: /* stmt: break_stmt  */
-#line 227 "parser.y"
+#line 229 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1540 "parser.tab.cc"
     break;
 
   case 31: /* stmt: continue_stmt  */
-#line 228 "parser.y"
+#line 230 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1546 "parser.tab.cc"
     break;
 
   case 32: /* stmt: block  */
-#line 229 "parser.y"
+#line 231 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1552 "parser.tab.cc"
     break;
 
   case 33: /* stmt: var_decl  */
-#line 230 "parser.y"
+#line 232 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1558 "parser.tab.cc"
     break;
 
   case 34: /* assign_stmt: IDENTIFIER ASSIGN expr SEMI  */
-#line 234 "parser.y"
+#line 236 "parser.y"
                                 {
         auto assign = std::make_unique<ambar::AssignNode>(std::string((yyvsp[-3].id)), std::unique_ptr<ambar::ASTNode>((yyvsp[-1].node)));
         free((yyvsp[-3].id));
@@ -1568,7 +1568,7 @@ yyreduce:
     break;
 
   case 35: /* assign_stmt: array_access ASSIGN expr SEMI  */
-#line 239 "parser.y"
+#line 241 "parser.y"
                                     {
         auto arrayAccess = dynamic_cast<ambar::ArrayAccessNode*>((yyvsp[-3].node));
         if (arrayAccess) {
@@ -1586,13 +1586,13 @@ yyreduce:
     break;
 
   case 36: /* call_stmt: func_call SEMI  */
-#line 255 "parser.y"
+#line 257 "parser.y"
                    { (yyval.node) = (yyvsp[-1].node); }
 #line 1592 "parser.tab.cc"
     break;
 
   case 37: /* return_stmt: RETURN expr SEMI  */
-#line 259 "parser.y"
+#line 261 "parser.y"
                        { 
           auto ret = std::make_unique<ambar::ReturnNode>(std::unique_ptr<ambar::ASTNode>((yyvsp[-1].node)));
           (yyval.node) = ret.release();
@@ -1601,7 +1601,7 @@ yyreduce:
     break;
 
   case 38: /* return_stmt: RETURN SEMI  */
-#line 263 "parser.y"
+#line 265 "parser.y"
                   { 
           auto ret = std::make_unique<ambar::ReturnNode>();
           (yyval.node) = ret.release();
@@ -1610,7 +1610,7 @@ yyreduce:
     break;
 
   case 39: /* if_stmt: IF LPAREN expr RPAREN stmt  */
-#line 270 "parser.y"
+#line 272 "parser.y"
                                  {
           auto ifNode = std::make_unique<ambar::IfNode>(
               std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), 
@@ -1622,7 +1622,7 @@ yyreduce:
     break;
 
   case 40: /* if_stmt: IF LPAREN expr RPAREN stmt ELSE stmt  */
-#line 277 "parser.y"
+#line 279 "parser.y"
                                            {
           auto ifNode = std::make_unique<ambar::IfNode>(
               std::unique_ptr<ambar::ASTNode>((yyvsp[-4].node)), 
@@ -1635,7 +1635,7 @@ yyreduce:
     break;
 
   case 41: /* while_stmt: WHILE LPAREN expr RPAREN stmt  */
-#line 288 "parser.y"
+#line 290 "parser.y"
                                   {
         auto whileNode = std::make_unique<ambar::WhileNode>(
             std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), 
@@ -1647,7 +1647,7 @@ yyreduce:
     break;
 
   case 42: /* for_var_decl: IDENTIFIER COLON type ASSIGN expr  */
-#line 298 "parser.y"
+#line 300 "parser.y"
                                         {
           auto var = std::make_unique<ambar::VarNode>(std::string((yyvsp[-4].id)), *(yyvsp[-2].str), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           delete (yyvsp[-2].str);
@@ -1658,7 +1658,7 @@ yyreduce:
     break;
 
   case 43: /* for_var_decl: IDENTIFIER COLON type  */
-#line 304 "parser.y"
+#line 306 "parser.y"
                             {
           auto var = std::make_unique<ambar::VarNode>(std::string((yyvsp[-2].id)), *(yyvsp[0].str), nullptr);
           delete (yyvsp[0].str);
@@ -1669,7 +1669,7 @@ yyreduce:
     break;
 
   case 44: /* for_assign_stmt: IDENTIFIER ASSIGN expr  */
-#line 313 "parser.y"
+#line 315 "parser.y"
                            {
         auto assign = std::make_unique<ambar::AssignNode>(
             std::string((yyvsp[-2].id)), 
@@ -1682,43 +1682,43 @@ yyreduce:
     break;
 
   case 45: /* for_init: for_var_decl  */
-#line 324 "parser.y"
+#line 326 "parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
 #line 1688 "parser.tab.cc"
     break;
 
   case 46: /* for_init: for_assign_stmt  */
-#line 325 "parser.y"
+#line 327 "parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
 #line 1694 "parser.tab.cc"
     break;
 
   case 47: /* for_init: expr  */
-#line 326 "parser.y"
+#line 328 "parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
 #line 1700 "parser.tab.cc"
     break;
 
   case 48: /* for_init: %empty  */
-#line 327 "parser.y"
+#line 329 "parser.y"
                    { (yyval.node) = nullptr; }
 #line 1706 "parser.tab.cc"
     break;
 
   case 49: /* opt_expr: %empty  */
-#line 331 "parser.y"
+#line 333 "parser.y"
                   { (yyval.node) = nullptr; }
 #line 1712 "parser.tab.cc"
     break;
 
   case 50: /* opt_expr: expr  */
-#line 332 "parser.y"
+#line 334 "parser.y"
                   { (yyval.node) = (yyvsp[0].node); }
 #line 1718 "parser.tab.cc"
     break;
 
   case 51: /* for_stmt: FOR LPAREN for_init SEMI opt_expr SEMI for_init RPAREN block  */
-#line 336 "parser.y"
+#line 338 "parser.y"
                                                                  {
         auto forNode = std::make_unique<ambar::ForNode>(
             std::unique_ptr<ambar::ASTNode>((yyvsp[-6].node)),
@@ -1732,7 +1732,7 @@ yyreduce:
     break;
 
   case 52: /* break_stmt: BREAK SEMI  */
-#line 348 "parser.y"
+#line 350 "parser.y"
                { 
         auto breakNode = std::make_unique<ambar::BreakNode>();
         (yyval.node) = breakNode.release();
@@ -1741,7 +1741,7 @@ yyreduce:
     break;
 
   case 53: /* continue_stmt: CONTINUE SEMI  */
-#line 355 "parser.y"
+#line 357 "parser.y"
                   { 
         auto continueNode = std::make_unique<ambar::ContinueNode>();
         (yyval.node) = continueNode.release();
@@ -1750,7 +1750,7 @@ yyreduce:
     break;
 
   case 54: /* block: LBRACE RBRACE  */
-#line 362 "parser.y"
+#line 364 "parser.y"
                   {
         auto blk = std::make_unique<ambar::BlockNode>();
         (yyval.node) = blk.release();
@@ -1759,7 +1759,7 @@ yyreduce:
     break;
 
   case 55: /* block: LBRACE stmt_list RBRACE  */
-#line 366 "parser.y"
+#line 368 "parser.y"
                               {
         auto blk = std::make_unique<ambar::BlockNode>();
         if ((yyvsp[-1].stmts)) {
@@ -1776,7 +1776,7 @@ yyreduce:
     break;
 
   case 56: /* stmt_list: stmt  */
-#line 381 "parser.y"
+#line 383 "parser.y"
            {
         (yyval.stmts) = new std::vector<ambar::ASTNode*>();
         if ((yyvsp[0].node)) (yyval.stmts)->push_back((yyvsp[0].node));
@@ -1785,7 +1785,7 @@ yyreduce:
     break;
 
   case 57: /* stmt_list: stmt_list stmt  */
-#line 385 "parser.y"
+#line 387 "parser.y"
                      {
         if ((yyvsp[0].node)) (yyvsp[-1].stmts)->push_back((yyvsp[0].node));
         (yyval.stmts) = (yyvsp[-1].stmts);
@@ -1794,43 +1794,43 @@ yyreduce:
     break;
 
   case 58: /* opt_args: %empty  */
-#line 392 "parser.y"
+#line 394 "parser.y"
                   { (yyval.stmts) = new std::vector<ambar::ASTNode*>(); }
 #line 1800 "parser.tab.cc"
     break;
 
   case 59: /* opt_args: args  */
-#line 393 "parser.y"
+#line 395 "parser.y"
            { (yyval.stmts) = (yyvsp[0].stmts); }
 #line 1806 "parser.tab.cc"
     break;
 
   case 60: /* args: expr  */
-#line 397 "parser.y"
+#line 399 "parser.y"
            { (yyval.stmts) = new std::vector<ambar::ASTNode*>(); if ((yyvsp[0].node)) (yyval.stmts)->push_back((yyvsp[0].node)); }
 #line 1812 "parser.tab.cc"
     break;
 
   case 61: /* args: args COMMA expr  */
-#line 398 "parser.y"
+#line 400 "parser.y"
                       { if ((yyvsp[0].node)) (yyvsp[-2].stmts)->push_back((yyvsp[0].node)); (yyval.stmts) = (yyvsp[-2].stmts); }
 #line 1818 "parser.tab.cc"
     break;
 
   case 62: /* expr: logic_expr  */
-#line 402 "parser.y"
+#line 404 "parser.y"
                { (yyval.node) = (yyvsp[0].node); }
 #line 1824 "parser.tab.cc"
     break;
 
   case 63: /* logic_expr: rel_expr  */
-#line 406 "parser.y"
+#line 408 "parser.y"
                { (yyval.node) = (yyvsp[0].node); }
 #line 1830 "parser.tab.cc"
     break;
 
   case 64: /* logic_expr: logic_expr AND rel_expr  */
-#line 407 "parser.y"
+#line 409 "parser.y"
                               { 
           auto binNode = std::make_unique<ambar::BinaryNode>(
               "AND", 
@@ -1843,7 +1843,7 @@ yyreduce:
     break;
 
   case 65: /* logic_expr: logic_expr OR rel_expr  */
-#line 415 "parser.y"
+#line 417 "parser.y"
                              { 
           auto binNode = std::make_unique<ambar::BinaryNode>(
               "OR", 
@@ -1856,13 +1856,13 @@ yyreduce:
     break;
 
   case 66: /* rel_expr: arith_expr  */
-#line 426 "parser.y"
+#line 428 "parser.y"
                  { (yyval.node) = (yyvsp[0].node); }
 #line 1862 "parser.tab.cc"
     break;
 
   case 67: /* rel_expr: arith_expr EQ arith_expr  */
-#line 427 "parser.y"
+#line 429 "parser.y"
                                { 
           auto binNode = std::make_unique<ambar::BinaryNode>("==", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1871,7 +1871,7 @@ yyreduce:
     break;
 
   case 68: /* rel_expr: arith_expr NEQ arith_expr  */
-#line 431 "parser.y"
+#line 433 "parser.y"
                                 { 
           auto binNode = std::make_unique<ambar::BinaryNode>("!=", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1880,7 +1880,7 @@ yyreduce:
     break;
 
   case 69: /* rel_expr: arith_expr LT arith_expr  */
-#line 435 "parser.y"
+#line 437 "parser.y"
                                { 
           auto binNode = std::make_unique<ambar::BinaryNode>("<", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1889,7 +1889,7 @@ yyreduce:
     break;
 
   case 70: /* rel_expr: arith_expr LE arith_expr  */
-#line 439 "parser.y"
+#line 441 "parser.y"
                                { 
           auto binNode = std::make_unique<ambar::BinaryNode>("<=", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1898,7 +1898,7 @@ yyreduce:
     break;
 
   case 71: /* rel_expr: arith_expr GT arith_expr  */
-#line 443 "parser.y"
+#line 445 "parser.y"
                                { 
           auto binNode = std::make_unique<ambar::BinaryNode>(">", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1907,7 +1907,7 @@ yyreduce:
     break;
 
   case 72: /* rel_expr: arith_expr GE arith_expr  */
-#line 447 "parser.y"
+#line 449 "parser.y"
                                { 
           auto binNode = std::make_unique<ambar::BinaryNode>(">=", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1916,13 +1916,13 @@ yyreduce:
     break;
 
   case 73: /* arith_expr: term  */
-#line 454 "parser.y"
+#line 456 "parser.y"
            { (yyval.node) = (yyvsp[0].node); }
 #line 1922 "parser.tab.cc"
     break;
 
   case 74: /* arith_expr: arith_expr ADD term  */
-#line 455 "parser.y"
+#line 457 "parser.y"
                           { 
           auto binNode = std::make_unique<ambar::BinaryNode>("+", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1931,7 +1931,7 @@ yyreduce:
     break;
 
   case 75: /* arith_expr: arith_expr SUB term  */
-#line 459 "parser.y"
+#line 461 "parser.y"
                           { 
           auto binNode = std::make_unique<ambar::BinaryNode>("-", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1940,13 +1940,13 @@ yyreduce:
     break;
 
   case 76: /* term: factor  */
-#line 466 "parser.y"
+#line 468 "parser.y"
              { (yyval.node) = (yyvsp[0].node); }
 #line 1946 "parser.tab.cc"
     break;
 
   case 77: /* term: term MUL factor  */
-#line 467 "parser.y"
+#line 469 "parser.y"
                       { 
           auto binNode = std::make_unique<ambar::BinaryNode>("*", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1955,7 +1955,7 @@ yyreduce:
     break;
 
   case 78: /* term: term DIV factor  */
-#line 471 "parser.y"
+#line 473 "parser.y"
                       { 
           auto binNode = std::make_unique<ambar::BinaryNode>("/", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1964,7 +1964,7 @@ yyreduce:
     break;
 
   case 79: /* term: term MOD factor  */
-#line 475 "parser.y"
+#line 477 "parser.y"
                       {
           auto binNode = std::make_unique<ambar::BinaryNode>("%", std::unique_ptr<ambar::ASTNode>((yyvsp[-2].node)), std::unique_ptr<ambar::ASTNode>((yyvsp[0].node)));
           (yyval.node) = binNode.release();
@@ -1973,79 +1973,79 @@ yyreduce:
     break;
 
   case 80: /* factor: NUM_INT  */
-#line 482 "parser.y"
+#line 484 "parser.y"
                      { auto numNode = std::make_unique<ambar::NumberNode>((yyvsp[0].num)); (yyval.node) = numNode.release(); }
 #line 1979 "parser.tab.cc"
     break;
 
   case 81: /* factor: NUM_REAL  */
-#line 483 "parser.y"
+#line 485 "parser.y"
                      { auto numNode = std::make_unique<ambar::NumberNode>((yyvsp[0].real)); (yyval.node) = numNode.release(); }
 #line 1985 "parser.tab.cc"
     break;
 
   case 82: /* factor: IDENTIFIER  */
-#line 484 "parser.y"
+#line 486 "parser.y"
                      { auto idNode = std::make_unique<ambar::IdentifierNode>((yyvsp[0].id)); free((yyvsp[0].id)); (yyval.node) = idNode.release(); }
 #line 1991 "parser.tab.cc"
     break;
 
   case 83: /* factor: STRING  */
-#line 485 "parser.y"
+#line 487 "parser.y"
                      { auto strNode = std::make_unique<ambar::StringNode>(*(yyvsp[0].str)); delete (yyvsp[0].str); (yyval.node) = strNode.release(); }
 #line 1997 "parser.tab.cc"
     break;
 
   case 84: /* factor: BOOL_TRUE  */
-#line 486 "parser.y"
+#line 488 "parser.y"
                      { auto boolNode = std::make_unique<ambar::BoolNode>(true); (yyval.node) = boolNode.release(); }
 #line 2003 "parser.tab.cc"
     break;
 
   case 85: /* factor: BOOL_FALSE  */
-#line 487 "parser.y"
+#line 489 "parser.y"
                      { auto boolNode = std::make_unique<ambar::BoolNode>(false); (yyval.node) = boolNode.release(); }
 #line 2009 "parser.tab.cc"
     break;
 
   case 86: /* factor: func_call  */
-#line 488 "parser.y"
+#line 490 "parser.y"
                      { (yyval.node) = (yyvsp[0].node); }
 #line 2015 "parser.tab.cc"
     break;
 
   case 87: /* factor: array_literal  */
-#line 489 "parser.y"
+#line 491 "parser.y"
                      { (yyval.node) = (yyvsp[0].node); }
 #line 2021 "parser.tab.cc"
     break;
 
   case 88: /* factor: array_access  */
-#line 490 "parser.y"
+#line 492 "parser.y"
                      { (yyval.node) = (yyvsp[0].node); }
 #line 2027 "parser.tab.cc"
     break;
 
   case 89: /* factor: LPAREN expr RPAREN  */
-#line 491 "parser.y"
+#line 493 "parser.y"
                          { (yyval.node) = (yyvsp[-1].node); }
 #line 2033 "parser.tab.cc"
     break;
 
   case 90: /* factor: SUB factor  */
-#line 492 "parser.y"
+#line 494 "parser.y"
                  { auto u = std::make_unique<ambar::UnaryNode>("-", std::unique_ptr<ambar::ASTNode>((yyvsp[0].node))); (yyval.node) = u.release(); }
 #line 2039 "parser.tab.cc"
     break;
 
   case 91: /* factor: NOT factor  */
-#line 493 "parser.y"
+#line 495 "parser.y"
                  { auto u = std::make_unique<ambar::UnaryNode>("NOT", std::unique_ptr<ambar::ASTNode>((yyvsp[0].node))); (yyval.node) = u.release(); }
 #line 2045 "parser.tab.cc"
     break;
 
   case 92: /* array_literal: LBRACKET array_elements RBRACKET  */
-#line 497 "parser.y"
+#line 499 "parser.y"
                                      {
         // Determinar tipo baseado nos elementos
         std::string elementType = "int"; // padrão
@@ -2074,7 +2074,7 @@ yyreduce:
     break;
 
   case 93: /* array_literal: LBRACKET RBRACKET  */
-#line 521 "parser.y"
+#line 523 "parser.y"
                         {
         std::string elementType = "int"; // Tipo padrão
         ambar::ArrayNode* arrayNode = new ambar::ArrayNode(elementType);
@@ -2085,7 +2085,7 @@ yyreduce:
     break;
 
   case 94: /* array_elements: expr  */
-#line 530 "parser.y"
+#line 532 "parser.y"
          {
         (yyval.stmts) = new std::vector<ambar::ASTNode*>();
         if ((yyvsp[0].node)) (yyval.stmts)->push_back((yyvsp[0].node));
@@ -2094,7 +2094,7 @@ yyreduce:
     break;
 
   case 95: /* array_elements: array_elements COMMA expr  */
-#line 534 "parser.y"
+#line 536 "parser.y"
                                 {
         if ((yyvsp[0].node)) (yyvsp[-2].stmts)->push_back((yyvsp[0].node));
         (yyval.stmts) = (yyvsp[-2].stmts);
@@ -2103,7 +2103,7 @@ yyreduce:
     break;
 
   case 96: /* array_access: IDENTIFIER LBRACKET expr RBRACKET  */
-#line 541 "parser.y"
+#line 543 "parser.y"
                                       {
         auto accessNode = std::make_unique<ambar::ArrayAccessNode>(
             std::string((yyvsp[-3].id)), 
@@ -2116,7 +2116,7 @@ yyreduce:
     break;
 
   case 97: /* func_call: IDENTIFIER LPAREN opt_args RPAREN  */
-#line 552 "parser.y"
+#line 554 "parser.y"
                                       { 
         std::vector<std::unique_ptr<ambar::ASTNode>> args;
         if ((yyvsp[-1].stmts)) {
@@ -2326,11 +2326,11 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 566 "parser.y"
+#line 568 "parser.y"
 
 
 void yyerror(const char* s) {
-    fprintf(stderr, "Parse error at line %d: %s\n", yylineno, s);
+    printf("Parse error at line %d: %s", yylineno, s);
 }
 
 void cleanup() {
