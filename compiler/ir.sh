@@ -1,5 +1,6 @@
 #!/bin/bash
 
+cd ../
 echo "Compilando Ambar Compiler..."
 
 # Gerar parser

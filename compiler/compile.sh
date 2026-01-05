@@ -117,7 +117,6 @@ fi
 
 # Verificar se o arquivo .ll foi gerado no diretório correto
 if [ ! -f "$src_dir/$filename.ll" ]; then
-  echo "❌ Erro: Arquivo '$src_dir/$filename.ll' não foi gerado"
   exit 1
 fi
 

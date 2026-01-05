@@ -3,6 +3,8 @@
 # A flag -f do rm ignora arquivos inexistentes e não gera erros
 rm -f *.o
 
+cd ..
+
 cd src/parser
 rm -f parser.tab.*
 cd ../..
