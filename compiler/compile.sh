@@ -6,6 +6,12 @@ SHOW_IR=false
 KEEP_IR=false
 KEEP_OBJ=false
 
+# Diretórios base
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+ROOT_DIR="$SCRIPT_DIR/.."
+BIN_DIR="$SCRIPT_DIR/bin"
+COMPILER_EXE="$BIN_DIR/ambar"
+
 # Função para mostrar ajuda
 show_help() {
   echo "Uso: $0 [OPÇÕES] <arquivo.amb>"
@@ -75,48 +81,44 @@ if [ $# -eq 0 ]; then
 fi
 
 # Verificar se o arquivo existe
-if [ ! -f "$1" ]; then
-  echo "Erro: Arquivo '$1' não encontrado"
+INPUT_FILE="$1"
+if [ ! -f "$INPUT_FILE" ]; then
+  echo "❌ Erro: Arquivo '$INPUT_FILE' não encontrado"
   exit 1
 fi
 
 # Verificar se é um arquivo .amb
-if [[ "$1" != *.amb ]]; then
-  echo "Aviso: O arquivo '$1' não tem extensão .amb"
+if [[ "$INPUT_FILE" != *.amb ]]; then
+  echo "⚠️  Aviso: O arquivo '$INPUT_FILE' não tem extensão .amb"
 fi
 
 # Extrair diretório e nome do arquivo
-src_dir=$(dirname "$1")
-filename=$(basename "$1" .amb)
+src_dir=$(dirname "$(realpath "$INPUT_FILE")")
+filename=$(basename "$INPUT_FILE" .amb)
 original_dir=$(pwd)
 
-# Salvar diretório atual para voltar depois
-SCRIPT_DIR=$(pwd)
+echo "🔍 Processando: $INPUT_FILE"
 
-# Entrar na pasta do arquivo fonte
-cd "$src_dir" || {
-  echo "Erro: Não foi possível entrar no diretório '$src_dir'"
-  exit 1
-}
-
-# Voltar para o diretório do script para executar o compilador
-cd "$SCRIPT_DIR" || {
-  echo "Erro: Não foi possível voltar ao diretório do compilador"
-  exit 1
-}
-
-# Verificar objetos necessários para o compilador
-if [[ ! -f "main.o" || ! -f "lex.yy.o" || ! -f "parser.tab.o" || ! -f "LLVMGenerator.o" ]]; then
-  echo "🔧 Compilando compilador..."
-  ./rm.sh
-  ./ir.sh
+# Verificar se o compilador existe
+if [ ! -f "$COMPILER_EXE" ]; then
+  echo "🔧 Compilador não encontrado, construindo..."
+  "$SCRIPT_DIR/rm.sh"
+  "$SCRIPT_DIR/ir.sh"
+  
+  if [ ! -f "$COMPILER_EXE" ]; then
+    echo "❌ Erro: Falha ao construir compilador"
+    exit 1
+  fi
 fi
 
 # Executar o compilador com nível de otimização
-./ambar "-$OPT_LEVEL" "$src_dir/$filename.amb"
+echo "🏗️  Gerando código LLVM..."
+"$COMPILER_EXE" "-$OPT_LEVEL" "$INPUT_FILE"
 
 # Verificar se o arquivo .ll foi gerado no diretório correto
-if [ ! -f "$src_dir/$filename.ll" ]; then
+LL_FILE="$src_dir/$filename.ll"
+if [ ! -f "$LL_FILE" ]; then
+  echo "❌ Erro: Falha ao gerar código LLVM"
   exit 1
 fi
 
@@ -125,40 +127,58 @@ if [ "$SHOW_IR" = true ]; then
   echo ""
   echo "📄 CÓDIGO IR GERADO:"
   echo "=========================================="
-  cat "$src_dir/$filename.ll"
+  cat "$LL_FILE"
   echo "=========================================="
   echo ""
 fi
 
 # Entrar no diretório do arquivo para compilar
 cd "$src_dir" || {
-  echo "Erro: Não foi possível entrar no diretório '$src_dir'"
+  echo "❌ Erro: Não foi possível entrar no diretório '$src_dir'"
   exit 1
 }
 
-# Compilar IR para objeto
-llc "-O$OPT_LEVEL" -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$filename.ll" -o "$filename.o"
+echo "🔨 Compilando IR para objeto..."
+OBJ_FILE="$filename.o"
+llc "-O$OPT_LEVEL" -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$filename.ll" -o "$OBJ_FILE"
 
-# Linkar
-gcc -no-pie "$filename.o" -o "$filename"
+if [ ! -f "$OBJ_FILE" ]; then
+  echo "❌ Erro: Falha ao compilar objeto"
+  exit 1
+fi
+
+echo "🔗 Linkando..."
+EXECUTABLE_FILE="$filename"
+gcc -no-pie "$OBJ_FILE" -o "$EXECUTABLE_FILE"
+
+if [ ! -f "$EXECUTABLE_FILE" ]; then
+  echo "❌ Erro: Falha no linking"
+  exit 1
+fi
 
 # Tornar executável
-chmod +x "$filename"
+chmod +x "$EXECUTABLE_FILE"
+
+echo "✅ Executável criado: $EXECUTABLE_FILE"
 
 # Limpeza de arquivos temporários
 if [ "$KEEP_IR" = false ]; then
-  rm -f "$filename.ll"
+  rm -f "$LL_FILE"
+  echo "🗑️  Removido: $LL_FILE"
 else
-  echo "💾 Mantido: $filename.ll"
+  echo "💾 Mantido: $LL_FILE"
 fi
 
 if [ "$KEEP_OBJ" = false ]; then
-  rm -f "$filename.o"
+  rm -f "$OBJ_FILE"
+  echo "🗑️  Removido: $OBJ_FILE"
 else
-  echo "💾 Mantido: $filename.o"
+  echo "💾 Mantido: $OBJ_FILE"
 fi
 
 # Voltar ao diretório original
-cd "$original_dir"
+cd "$original_dir" || true
 
-exit $EXIT_CODE
+echo ""
+echo "🎉 Compilação concluída com sucesso!"
+echo "   Executável: $src_dir/$EXECUTABLE_FILE"

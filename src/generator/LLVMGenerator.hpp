@@ -33,6 +33,14 @@
 #include "ast/nodes/statements/WhileNode.hpp"
 
 // ============================================================================
+// INCLUSÕES DAS NOVAS CLASSES MODULARIZADAS
+// ============================================================================
+
+#include "./core/LLVMContextManager.hpp"
+#include "./core/IRBuilderFacade.hpp"
+#include "./core/TypeSystem.hpp"
+
+// ============================================================================
 // INCLUSÕES DO LLVM CORE (INFRAESTRUTURA BÁSICA)
 // ============================================================================
 
@@ -336,24 +344,41 @@ public:
     void analyzeAndReportOptimizationProblems();
     
     // ========================================================================
-    // MEMBROS PÚBLICOS (CONTROLADOS)
+    // ACESSO AOS COMPONENTES INTERNOS
     // ========================================================================
     
     /**
-     * @brief Módulo LLVM principal contendo todas as funções e globais
-     * 
-     * Acesso público permitido para integração com outros sistemas,
-     * mas modificações devem ser feitas com cuidado.
+     * @brief Obtém o gerenciador de contexto
+     * @return Referência para o gerenciador de contexto
      */
-    std::unique_ptr<llvm::Module> module;
+    LLVMContextManager& getContextManager() { return *contextManager; }
+    
+    /**
+     * @brief Obtém o construtor de IR
+     * @return Referência para o construtor de IR
+     */
+    IRBuilderFacade& getIRBuilder() { return *irBuilder; }
+    
+    /**
+     * @brief Obtém o sistema de tipos
+     * @return Referência para o sistema de tipos
+     */
+    TypeSystem& getTypeSystem() { return *typeSystem; }
+    
+    /**
+     * @brief Obtém o módulo LLVM
+     * @return Referência para o módulo LLVM
+     */
+    llvm::Module& getModule() { return contextManager->getModule(); }
 
 private:
     // ========================================================================
-    // COMPONENTES DO CONTEXTO LLVM
+    // COMPONENTES MODULARIZADOS
     // ========================================================================
     
-    std::unique_ptr<llvm::LLVMContext> context; ///< Contexto LLVM isolado
-    std::unique_ptr<llvm::IRBuilder<>> builder; ///< Construtor de instruções IR
+    std::unique_ptr<LLVMContextManager> contextManager; ///< Gerencia contexto e módulo LLVM
+    std::unique_ptr<IRBuilderFacade> irBuilder;         ///< Fachada para construção de IR
+    std::unique_ptr<TypeSystem> typeSystem;             ///< Sistema de tipos
     
     llvm::Function* currentFunction = nullptr; ///< Função sendo gerada atualmente
     llvm::Function* printfFunc = nullptr;      ///< Referência para função printf

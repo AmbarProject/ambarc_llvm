@@ -1,4 +1,7 @@
 #include "LLVMGenerator.hpp"
+#include "./core/LLVMContextManager.hpp"
+#include "./core/IRBuilderFacade.hpp"
+#include "./core/TypeSystem.hpp"
 #include <llvm/IR/Verifier.h>
 #include <memory>
 #include <sstream>
@@ -13,10 +16,11 @@ using namespace llvm;
 
 LLVMGenerator::LLVMGenerator(OptimizationLevel level) 
     : optLevel(level) {
-    // Criar os componentes principais do contexto LLVM
-    context = std::make_unique<LLVMContext>();
-    module = std::make_unique<Module>("ambar", *context);
-    builder = std::make_unique<IRBuilder<>>(*context);
+    // Criar os componentes modulares principais
+    contextManager = std::make_unique<LLVMContextManager>("ambar");
+    typeSystem = std::make_unique<TypeSystem>(contextManager->getContext());
+    irBuilder = std::make_unique<IRBuilderFacade>(contextManager->getContext());
+    
     currentFunction = nullptr;
     
     // Declarar a função printf para uso em operações de impressão
@@ -28,10 +32,13 @@ LLVMGenerator::LLVMGenerator(OptimizationLevel level)
 // ============================================================================
 
 void LLVMGenerator::declarePrintfFunction() {
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    
     // Definir o tipo da função printf: int printf(const char* format, ...)
     FunctionType* printfType = FunctionType::get(
-        Type::getInt32Ty(*context),
-        {PointerType::get(Type::getInt8Ty(*context), 0)},
+        Type::getInt32Ty(context),
+        {PointerType::get(Type::getInt8Ty(context), 0)},
         true  // varargs: suporta número variável de argumentos
     );
     
@@ -40,7 +47,7 @@ void LLVMGenerator::declarePrintfFunction() {
         printfType,
         Function::ExternalLinkage,
         "printf",
-        *module
+        module
     );
 }
 
@@ -315,7 +322,7 @@ void LLVMGenerator::analyzeAndReportOptimizationProblems() {
     llvm::errs() << "\n🔍 Iniciando análise inovadora de otimização por grafos...\n";
     
     // Executar análise de otimização e imprimir resultados
-    OptimizationAnalyzer analyzer(*module);
+    OptimizationAnalyzer analyzer(contextManager->getModule());
     auto problems = analyzer.analyzeOptimizationProblems();
     analyzer.printProblematicNodes(problems);
     
@@ -324,6 +331,7 @@ void LLVMGenerator::analyzeAndReportOptimizationProblems() {
 }
 
 void LLVMGenerator::performAdvancedOptimizationAnalysis() {
+    auto& module = contextManager->getModule();
     llvm::errs() << "\n=== ANÁLISE AVANÇADA DE GRAFOS ===\n";
     
     int totalBlocks = 0;
@@ -331,7 +339,7 @@ void LLVMGenerator::performAdvancedOptimizationAnalysis() {
     int problematicBlocks = 0;
     
     // Analisar cada função e bloco no módulo
-    for (llvm::Function& F : *module) {
+    for (llvm::Function& F : module) {
         if (F.isDeclaration() || F.empty()) continue;
         
         totalFunctions++;
@@ -425,11 +433,14 @@ llvm::Value* LLVMGenerator::generateArrayLiteral(ArrayNode* node) {
         return nullptr;
     }
     
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     // Criar tipo de array com tamanho exato dos elementos
     ArrayType* arrayType = ArrayType::get(elemType, elements.size());
     
     // Alocar espaço na stack para o array
-    AllocaInst* arrayStorage = builder->CreateAlloca(arrayType, nullptr, "array.storage");
+    AllocaInst* arrayStorage = builder.CreateAlloca(arrayType, nullptr, "array.storage");
     
     // Inicializar cada elemento do array
     for (size_t i = 0; i < elements.size(); ++i) {
@@ -444,26 +455,26 @@ llvm::Value* LLVMGenerator::generateArrayLiteral(ArrayNode* node) {
         
         // Calcular ponteiro para este elemento específico
         Value* indices[] = {
-            ConstantInt::get(Type::getInt32Ty(*context), 0),  // índice base do array
-            ConstantInt::get(Type::getInt32Ty(*context), i)   // índice do elemento
+            ConstantInt::get(Type::getInt32Ty(context), 0),  // índice base do array
+            ConstantInt::get(Type::getInt32Ty(context), i)   // índice do elemento
         };
         
-        Value* elementPtr = builder->CreateGEP(arrayType, arrayStorage, indices, "elem.ptr");
+        Value* elementPtr = builder.CreateGEP(arrayType, arrayStorage, indices, "elem.ptr");
         
         // Converter tipos se necessário (ex: bool para int, int para float)
         if (elementValue->getType() != elemType) {
             if (elemType->isIntegerTy(32) && elementValue->getType()->isIntegerTy(1)) {
-                elementValue = builder->CreateZExt(elementValue, elemType, "zext");
+                elementValue = builder.CreateZExt(elementValue, elemType, "zext");
             } else if (elemType->isIntegerTy(1) && elementValue->getType()->isIntegerTy(32)) {
-                elementValue = builder->CreateICmpNE(elementValue, 
-                    ConstantInt::get(*context, APInt(32, 0)), "boolconv");
+                elementValue = builder.CreateICmpNE(elementValue, 
+                    ConstantInt::get(context, APInt(32, 0)), "boolconv");
             } else if (elemType->isFloatTy() && elementValue->getType()->isIntegerTy(32)) {
-                elementValue = builder->CreateSIToFP(elementValue, elemType, "sitofp");
+                elementValue = builder.CreateSIToFP(elementValue, elemType, "sitofp");
             }
         }
         
         // Armazenar o valor convertido no array
-        builder->CreateStore(elementValue, elementPtr);
+        builder.CreateStore(elementValue, elementPtr);
         
         llvm::errs() << "DEBUG: Armazenado elemento " << i << " no array\n";
     }
@@ -482,6 +493,9 @@ Value* LLVMGenerator::generateArrayAssignment(AssignNode* node) {
         return nullptr;
     }
     
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     // Localizar o array nas tabelas de símbolos (locais ou globais)
     Value* arrayPtr = nullptr;
     Type* arrayType = nullptr;
@@ -498,7 +512,7 @@ Value* LLVMGenerator::generateArrayAssignment(AssignNode* node) {
     }
     
     // Determinar o tipo do elemento do array
-    Type* elementType = getArrayElementType(arrayType);
+    Type* elementType = typeSystem->getArrayElementType(arrayType);
     if (!elementType) {
         llvm::errs() << "Erro: Não foi possível determinar o tipo do elemento do array '" 
                      << arrayName << "'\n";
@@ -507,22 +521,22 @@ Value* LLVMGenerator::generateArrayAssignment(AssignNode* node) {
     
     // Calcular ponteiro para o elemento específico usando aritmética de ponteiros segura
     Value* indices[] = { 
-        ConstantInt::get(Type::getInt32Ty(*context), 0),  // índice base
+        ConstantInt::get(Type::getInt32Ty(context), 0),  // índice base
         indexValue                                       // índice do elemento
     };
     
-    Value* elemPtr = builder->CreateInBoundsGEP(arrayType, arrayPtr, indices, "arrayelem");
+    Value* elemPtr = builder.CreateInBoundsGEP(arrayType, arrayPtr, indices, "arrayelem");
     
     // Converter o valor se necessário para corresponder ao tipo do elemento
     if (value->getType() != elementType) {
         if (elementType->isIntegerTy(32) && value->getType()->isIntegerTy(1)) {
-            value = builder->CreateZExt(value, elementType, "intconv");
+            value = irBuilder->createBoolToInt(value);
         } else if (elementType->isIntegerTy(1) && value->getType()->isIntegerTy(32)) {
-            value = builder->CreateICmpNE(value, ConstantInt::get(*context, APInt(32, 0)), "boolconv");
+            value = irBuilder->createIntToBool(value);
         } else if (elementType->isFloatTy() && value->getType()->isIntegerTy(32)) {
-            value = builder->CreateSIToFP(value, elementType, "floatconv");
+            value = irBuilder->createIntToFloat(value);
         } else if (elementType->isIntegerTy(32) && value->getType()->isFloatTy()) {
-            value = builder->CreateFPToSI(value, elementType, "intconv");
+            value = irBuilder->createFloatToInt(value);
         } else {
             llvm::errs() << "Erro: Tipos incompatíveis em assignment de array. Esperado: " 
                         << *elementType << ", obtido: " << *value->getType() << "\n";
@@ -531,7 +545,7 @@ Value* LLVMGenerator::generateArrayAssignment(AssignNode* node) {
     }
     
     // Armazenar o valor convertido na posição calculada
-    builder->CreateStore(value, elemPtr);
+    builder.CreateStore(value, elemPtr);
     return value;
 }
 
@@ -543,6 +557,9 @@ Value* LLVMGenerator::generateArrayAccess(ArrayAccessNode* node) {
         llvm::errs() << "Erro: Índice de array inválido\n";
         return nullptr;
     }
+    
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
     
     // Localizar o array (local ou global)
     Value* arrayPtr = nullptr;
@@ -560,7 +577,7 @@ Value* LLVMGenerator::generateArrayAccess(ArrayAccessNode* node) {
     }
     
     // Determinar tipo do elemento
-    Type* elementType = getArrayElementType(arrayType);
+    Type* elementType = typeSystem->getArrayElementType(arrayType);
     if (!elementType) {
         llvm::errs() << "Erro: Não foi possível determinar o tipo do elemento do array '" 
                      << arrayName << "'\n";
@@ -569,14 +586,14 @@ Value* LLVMGenerator::generateArrayAccess(ArrayAccessNode* node) {
     
     // Calcular ponteiro para o elemento usando aritmética de ponteiros com verificação de limites
     Value* indices[] = {
-        ConstantInt::get(Type::getInt32Ty(*context), 0),  // índice base
+        ConstantInt::get(Type::getInt32Ty(context), 0),  // índice base
         indexValue                                       // índice do elemento
     };
     
-    Value* elemPtr = builder->CreateInBoundsGEP(arrayType, arrayPtr, indices, "arrayelem");
+    Value* elemPtr = builder.CreateInBoundsGEP(arrayType, arrayPtr, indices, "arrayelem");
     
     // Carregar e retornar o valor do elemento
-    return builder->CreateLoad(elementType, elemPtr, "arrayload");
+    return builder.CreateLoad(elementType, elemPtr, "arrayload");
 }
 
 // ============================================================================
@@ -588,6 +605,9 @@ Value* LLVMGenerator::generatePrintCall(CallNode* node) {
         llvm::errs() << "Erro: print() requer pelo menos um argumento\n";
         return nullptr;
     }
+    
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
     
     std::vector<Value*> printfArgs;
     
@@ -606,10 +626,10 @@ Value* LLVMGenerator::generatePrintCall(CallNode* node) {
         } else if (arg->getType()->isFloatTy()) {
             formatStr = "%f";  // float
             // printf espera double, não float, então converter
-            arg = builder->CreateFPExt(arg, Type::getDoubleTy(*context), "fpext");
+            arg = builder.CreateFPExt(arg, Type::getDoubleTy(context), "fpext");
         } else if (arg->getType()->isIntegerTy(1)) {
             formatStr = "%d";  // booleano como inteiro
-            arg = builder->CreateZExt(arg, Type::getInt32Ty(*context), "boolconv");
+            arg = builder.CreateZExt(arg, Type::getInt32Ty(context), "boolconv");
         } else if (arg->getType()->isPointerTy()) {
             formatStr = "%s";  // string
         } else {
@@ -624,7 +644,7 @@ Value* LLVMGenerator::generatePrintCall(CallNode* node) {
         
         // Criar string literal para o formato e chamar printf
         GlobalVariable* formatStrGlobal = createStringLiteral(formatStr);
-        Constant* zero = ConstantInt::get(Type::getInt32Ty(*context), 0);
+        Constant* zero = ConstantInt::get(Type::getInt32Ty(context), 0);
         Constant* indices[] = {zero, zero};
         Value* formatStrPtr = ConstantExpr::getGetElementPtr(
             formatStrGlobal->getValueType(),
@@ -636,12 +656,12 @@ Value* LLVMGenerator::generatePrintCall(CallNode* node) {
         printfArgs.clear();
         printfArgs.push_back(formatStrPtr);
         printfArgs.push_back(arg);
-        builder->CreateCall(printfFunc, printfArgs);
+        builder.CreateCall(printfFunc, printfArgs);
     }
     
     // Adicionar nova linha no final da impressão
     GlobalVariable* newlineGlobal = createStringLiteral("\n");
-    Constant* zero = ConstantInt::get(Type::getInt32Ty(*context), 0);
+    Constant* zero = ConstantInt::get(Type::getInt32Ty(context), 0);
     Constant* indices[] = {zero, zero};
     Value* newlinePtr = ConstantExpr::getGetElementPtr(
         newlineGlobal->getValueType(),
@@ -652,7 +672,7 @@ Value* LLVMGenerator::generatePrintCall(CallNode* node) {
     
     printfArgs.clear();
     printfArgs.push_back(newlinePtr);
-    return builder->CreateCall(printfFunc, printfArgs);
+    return builder.CreateCall(printfFunc, printfArgs);
 }
 
 // ============================================================================
@@ -681,8 +701,10 @@ void LLVMGenerator::optimizeFunction(Function* func) {
         return; // Sem otimizações no nível O0
     }
     
+    auto& module = contextManager->getModule();
+    
     // Criar gerenciador de passes para função
-    legacy::FunctionPassManager FPM(module.get());
+    legacy::FunctionPassManager FPM(&module);
     
     // Configurar passes baseados no nível de otimização
     if (optLevel >= OptimizationLevel::O1) {
@@ -712,6 +734,8 @@ void LLVMGenerator::optimizeFunction(Function* func) {
 void LLVMGenerator::optimizeModule() {
     if (optLevel == OptimizationLevel::O0) return;
 
+    auto& module = contextManager->getModule();
+
     // Configurar sistema moderno de passes do LLVM
     PassBuilder PB;
     LoopAnalysisManager LAM;
@@ -736,7 +760,7 @@ void LLVMGenerator::optimizeModule() {
     }
 
     // Executar pipeline de otimização no módulo inteiro
-    MPM.run(*module, MAM);
+    MPM.run(module, MAM);
 }
 
 // ============================================================================
@@ -749,12 +773,15 @@ GlobalVariable* LLVMGenerator::createStringLiteral(const std::string& value) {
         return stringLiterals[value];
     }
     
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    
     // Criar constante de array de caracteres
-    Constant* strConstant = ConstantDataArray::getString(*context, value);
+    Constant* strConstant = ConstantDataArray::getString(context, value);
     
     // Criar variável global para armazenar a string
     GlobalVariable* strArray = new GlobalVariable(
-        *module,
+        module,
         strConstant->getType(),
         true, // constante (não pode ser modificada)
         GlobalValue::PrivateLinkage, // visibilidade interna ao módulo
@@ -827,9 +854,13 @@ void LLVMGenerator::disableOptimizations() {
 // ============================================================================
 
 void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    auto& builder = irBuilder->getBuilder();
+    
     // Definir tipo da função main: int main(void)
     FunctionType* mainFuncType = FunctionType::get(
-        Type::getInt32Ty(*context),
+        Type::getInt32Ty(context),
         false
     );
     
@@ -838,13 +869,13 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
         mainFuncType,
         Function::ExternalLinkage,
         "main",
-        *module
+        module
     );
     
     // Configurar como função atual
     currentFunction = mainFunc;
-    BasicBlock* bb = BasicBlock::Create(*context, "entry", mainFunc);
-    builder->SetInsertPoint(bb);
+    BasicBlock* bb = BasicBlock::Create(context, "entry", mainFunc);
+    builder.SetInsertPoint(bb);
     
     if (auto programNode = dynamic_cast<ProgramNode*>(astRoot.get())) {
         // Verificar novamente se existe main explícita (segurança)
@@ -874,7 +905,7 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
             }
             
             // Verificar se ainda podemos adicionar instruções
-            BasicBlock* currentBB = builder->GetInsertBlock();
+            BasicBlock* currentBB = builder.GetInsertBlock();
             if (currentBB->getTerminator()) {
                 break; // Já tem retorno, parar execução
             }
@@ -885,9 +916,9 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
     }
     
     // Garantir que a função termine com um retorno
-    BasicBlock* currentBB = builder->GetInsertBlock();
+    BasicBlock* currentBB = builder.GetInsertBlock();
     if (!currentBB->getTerminator()) {
-        builder->CreateRet(ConstantInt::get(*context, APInt(32, 0))); // return 0
+        builder.CreateRet(ConstantInt::get(context, APInt(32, 0))); // return 0
     }
     
     // Verificar validade da função gerada
@@ -900,6 +931,8 @@ void LLVMGenerator::generateMainFunction(std::unique_ptr<ASTNode>& astRoot) {
 // ============================================================================
 
 Value* LLVMGenerator::generateBlock(BlockNode* node) {
+    auto& builder = irBuilder->getBuilder();
+    
     // Salvar estado atual para restaurar após o bloco (escopo local)
     std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
     std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
@@ -911,7 +944,7 @@ Value* LLVMGenerator::generateBlock(BlockNode* node) {
     
     // Processar statements em sequência
     Value* lastValue = nullptr;
-    BasicBlock* currentBB = builder->GetInsertBlock();
+    BasicBlock* currentBB = builder.GetInsertBlock();
     
     for (const auto& stmt : node->getStatements()) {
         // Se o bloco já terminou (return/break/continue), parar execução
@@ -922,7 +955,7 @@ Value* LLVMGenerator::generateBlock(BlockNode* node) {
         lastValue = generateExpr(stmt.get());
         
         // Atualizar referência para o bloco atual
-        currentBB = builder->GetInsertBlock();
+        currentBB = builder.GetInsertBlock();
         
         // Se encontrou um terminador, parar processamento de statements
         if (currentBB->getTerminator()) {
@@ -938,8 +971,11 @@ Value* LLVMGenerator::generateBlock(BlockNode* node) {
 }
 
 Value* LLVMGenerator::generateLocalVariable(VarNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     Type* type = getLLVMType(node->getType());
-    AllocaInst* alloca = builder->CreateAlloca(type, nullptr, node->getName());
+    AllocaInst* alloca = builder.CreateAlloca(type, nullptr, node->getName());
     
     // Registrar variável nas tabelas de símbolos locais
     namedValues[node->getName()] = alloca;
@@ -952,23 +988,24 @@ Value* LLVMGenerator::generateLocalVariable(VarNode* node) {
             // Converter tipo se necessário
             if (initVal->getType() != type) {
                 if (type->isIntegerTy(1) && initVal->getType()->isIntegerTy(32)) {
-                    initVal = builder->CreateICmpNE(
-                        initVal, 
-                        ConstantInt::get(*context, APInt(32, 0)), 
-                        "boolconv");
+                    initVal = irBuilder->createIntToBool(initVal);
                 } else if (type->isIntegerTy(32) && initVal->getType()->isIntegerTy(1)) {
-                    initVal = builder->CreateZExt(initVal, type, "intconv");
+                    initVal = irBuilder->createBoolToInt(initVal);
                 } else if (type->isFloatTy() && initVal->getType()->isIntegerTy(32)) {
-                    initVal = builder->CreateSIToFP(initVal, type, "floatconv");
+                    initVal = irBuilder->createIntToFloat(initVal);
                 }
             }
-            builder->CreateStore(initVal, alloca);
+            builder.CreateStore(initVal, alloca);
         }
     }
     return alloca;
 }
 
 Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    auto& builder = irBuilder->getBuilder();
+    
     Type* type = getLLVMType(node->getType());
     Constant* initVal = nullptr;
     
@@ -978,18 +1015,18 @@ Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
         
         if (!initVal) {
             // Se não for constante, tentar avaliar em função temporária
-            BasicBlock* currentBB = builder->GetInsertBlock();
-            builder->ClearInsertionPoint();
+            BasicBlock* currentBB = builder.GetInsertBlock();
+            builder.ClearInsertionPoint();
             
             Function* tempFunc = Function::Create(
                 FunctionType::get(type, false),
                 Function::InternalLinkage,
                 "temp_eval",
-                *module
+                module
             );
             
-            BasicBlock* bb = BasicBlock::Create(*context, "entry", tempFunc);
-            builder->SetInsertPoint(bb);
+            BasicBlock* bb = BasicBlock::Create(context, "entry", tempFunc);
+            builder.SetInsertPoint(bb);
             
             Value* init = generateExpr(node->getInit().get());
             if (auto constant = dyn_cast<Constant>(init)) {
@@ -999,7 +1036,7 @@ Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
             // Limpar função temporária
             tempFunc->eraseFromParent();
             if (currentBB) {
-                builder->SetInsertPoint(currentBB);
+                builder.SetInsertPoint(currentBB);
             }
         }
         
@@ -1012,11 +1049,11 @@ Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
     // Usar valor padrão se não houver inicialização
     if (!initVal) {
         if (type->isFloatTy()) {
-            initVal = ConstantFP::get(*context, APFloat(0.0f));
+            initVal = ConstantFP::get(context, APFloat(0.0f));
         } else if (type->isIntegerTy(32)) {
-            initVal = ConstantInt::get(*context, APInt(32, 0));
+            initVal = ConstantInt::get(context, APInt(32, 0));
         } else if (type->isIntegerTy(1)) {
-            initVal = ConstantInt::get(*context, APInt(1, 0));
+            initVal = ConstantInt::get(context, APInt(1, 0));
         } else if (type->isPointerTy()) {
             initVal = ConstantPointerNull::get(cast<PointerType>(type));
         }
@@ -1024,7 +1061,7 @@ Value* LLVMGenerator::generateGlobalVariable(VarNode* node) {
 
     // Criar variável global
     GlobalVariable* gVar = new GlobalVariable(
-        *module,
+        module,
         type,
         false, // não constante (pode ser modificada)
         GlobalValue::InternalLinkage,
@@ -1048,17 +1085,19 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
         return nullptr;
     }
 
+    auto& context = contextManager->getContext();
+
     // Casos básicos: números, booleanos, strings
     if (auto num = dynamic_cast<NumberNode*>(node)) {
         if (num->isFloatingPoint()) {
             float floatValue = static_cast<float>(num->getFloatValue());
-            return ConstantFP::get(*context, APFloat(floatValue));
+            return ConstantFP::get(context, APFloat(floatValue));
         } else {
-            return ConstantInt::get(*context, APInt(32, num->getIntValue()));
+            return ConstantInt::get(context, APInt(32, num->getIntValue()));
         }
     } 
     else if (auto boolNode = dynamic_cast<BoolNode*>(node)) {
-        return ConstantInt::get(*context, APInt(1, boolNode->getValue() ? 1 : 0));
+        return ConstantInt::get(context, APInt(1, boolNode->getValue() ? 1 : 0));
     } 
     else if (auto strNode = dynamic_cast<StringNode*>(node)) {
         return createStringLiteral(strNode->getValue());
@@ -1096,20 +1135,20 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
             
             if (op == "+") {
                 lVal.add(rVal, APFloat::rmNearestTiesToEven);
-                return ConstantFP::get(*context, lVal);
+                return ConstantFP::get(context, lVal);
             } else if (op == "-") {
                 lVal.subtract(rVal, APFloat::rmNearestTiesToEven);
-                return ConstantFP::get(*context, lVal);
+                return ConstantFP::get(context, lVal);
             } else if (op == "*") {
                 lVal.multiply(rVal, APFloat::rmNearestTiesToEven);
-                return ConstantFP::get(*context, lVal);
+                return ConstantFP::get(context, lVal);
             } else if (op == "/") {
                 if (rVal.isZero()) {
                     llvm::errs() << "Erro: Divisão por zero em expressão constante\n";
                     return nullptr;
                 }
                 lVal.divide(rVal, APFloat::rmNearestTiesToEven);
-                return ConstantFP::get(*context, lVal);
+                return ConstantFP::get(context, lVal);
             }
         }
         // Operações com inteiros
@@ -1117,22 +1156,22 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
             APInt lVal = cast<ConstantInt>(L)->getValue();
             APInt rVal = cast<ConstantInt>(R)->getValue();
             
-            if (op == "+") return ConstantInt::get(*context, lVal + rVal);
-            if (op == "-") return ConstantInt::get(*context, lVal - rVal);
-            if (op == "*") return ConstantInt::get(*context, lVal * rVal);
+            if (op == "+") return ConstantInt::get(context, lVal + rVal);
+            if (op == "-") return ConstantInt::get(context, lVal - rVal);
+            if (op == "*") return ConstantInt::get(context, lVal * rVal);
             if (op == "/") {
                 if (rVal == 0) {
                     llvm::errs() << "Erro: Divisão por zero em expressão constante\n";
                     return nullptr;
                 }
-                return ConstantInt::get(*context, lVal.sdiv(rVal));
+                return ConstantInt::get(context, lVal.sdiv(rVal));
             }
-            if (op == "==") return ConstantInt::get(*context, APInt(1, lVal == rVal));
-            if (op == "!=") return ConstantInt::get(*context, APInt(1, lVal != rVal));
-            if (op == "<") return ConstantInt::get(*context, APInt(1, lVal.slt(rVal)));
-            if (op == ">") return ConstantInt::get(*context, APInt(1, lVal.sgt(rVal)));
-            if (op == "<=") return ConstantInt::get(*context, APInt(1, lVal.sle(rVal)));
-            if (op == ">=") return ConstantInt::get(*context, APInt(1, lVal.sge(rVal)));
+            if (op == "==") return ConstantInt::get(context, APInt(1, lVal == rVal));
+            if (op == "!=") return ConstantInt::get(context, APInt(1, lVal != rVal));
+            if (op == "<") return ConstantInt::get(context, APInt(1, lVal.slt(rVal)));
+            if (op == ">") return ConstantInt::get(context, APInt(1, lVal.sgt(rVal)));
+            if (op == "<=") return ConstantInt::get(context, APInt(1, lVal.sle(rVal)));
+            if (op == ">=") return ConstantInt::get(context, APInt(1, lVal.sge(rVal)));
         }
         
         llvm::errs() << "Erro: Operação '" << op << "' não suportada em contexto constante\n";
@@ -1149,16 +1188,16 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
             if (operand->getType()->isFloatTy()) {
                 APFloat floatVal = cast<ConstantFP>(operand)->getValueAPF();
                 floatVal.changeSign();
-                return ConstantFP::get(*context, floatVal);
+                return ConstantFP::get(context, floatVal);
             } else if (operand->getType()->isIntegerTy(32)) {
                 APInt intVal = cast<ConstantInt>(operand)->getValue();
-                return ConstantInt::get(*context, -intVal);
+                return ConstantInt::get(context, -intVal);
             }
         } 
         else if (op == "~") {
             if (operand->getType()->isIntegerTy(32)) {
                 APInt intVal = cast<ConstantInt>(operand)->getValue();
-                return ConstantInt::get(*context, ~intVal);
+                return ConstantInt::get(context, ~intVal);
             }
         }
 
@@ -1175,6 +1214,9 @@ Constant* LLVMGenerator::evaluateConstantExpression(ASTNode* node) {
 // ============================================================================
 
 void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    
     // Primeiro passe: criar todas as globais com valores padrão
     for (const auto& decl : program->getDeclarations()) {
         if (auto varNode = dynamic_cast<VarNode*>(decl.get())) {
@@ -1183,11 +1225,11 @@ void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
             
             // Definir valores padrão baseados no tipo
             if (type->isFloatTy()) {
-                initVal = ConstantFP::get(*context, APFloat(0.0f));
+                initVal = ConstantFP::get(context, APFloat(0.0f));
             } else if (type->isIntegerTy(32)) {
-                initVal = ConstantInt::get(*context, APInt(32, 0));
+                initVal = ConstantInt::get(context, APInt(32, 0));
             } else if (type->isIntegerTy(1)) {
-                initVal = ConstantInt::get(*context, APInt(1, 0));
+                initVal = ConstantInt::get(context, APInt(1, 0));
             } else if (type->isPointerTy()) {
                 initVal = ConstantPointerNull::get(cast<PointerType>(type));
             } else {
@@ -1197,7 +1239,7 @@ void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
             }
             
             GlobalVariable* gVar = new GlobalVariable(
-                *module,
+                module,
                 type,
                 false,
                 GlobalValue::InternalLinkage,
@@ -1221,18 +1263,18 @@ void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
                     if (initVal->getType() != expectedType) {
                         if (expectedType->isFloatTy() && initVal->getType()->isIntegerTy(32)) {
                             if (auto intVal = dyn_cast<ConstantInt>(initVal)) {
-                                initVal = ConstantFP::get(*context, 
+                                initVal = ConstantFP::get(context, 
                                     APFloat(static_cast<float>(intVal->getSExtValue())));
                             }
                         } else if (expectedType->isIntegerTy(32) && initVal->getType()->isFloatTy()) {
                             if (auto floatVal = dyn_cast<ConstantFP>(initVal)) {
                                 APFloat floatValue = floatVal->getValueAPF();
-                                initVal = ConstantInt::get(*context, 
+                                initVal = ConstantInt::get(context, 
                                     APInt(32, static_cast<int32_t>(floatValue.convertToFloat())));
                             }
                         } else if (expectedType->isIntegerTy(1) && initVal->getType()->isIntegerTy(32)) {
                             if (auto intVal = dyn_cast<ConstantInt>(initVal)) {
-                                initVal = ConstantInt::get(*context, 
+                                initVal = ConstantInt::get(context, 
                                     APInt(1, intVal->getZExtValue() != 0));
                             }
                         }
@@ -1261,16 +1303,12 @@ void LLVMGenerator::handleGlobalVariables(ProgramNode* program) {
 // ============================================================================
 
 Type* LLVMGenerator::getArrayElementType(Type* arrayType) {
-    if (arrayType->isArrayTy()) {
-        return arrayType->getArrayElementType();
-    } else if (arrayType->isPointerTy()) {
-        PointerType* ptrType = cast<PointerType>(arrayType);
-        return ptrType->getArrayElementType();
-    }
-    return nullptr;
+    return typeSystem->getArrayElementType(arrayType);
 }
 
 llvm::Value* LLVMGenerator::generateVariable(VarNode* node) {
+    auto& builder = irBuilder->getBuilder();
+    
     std::string typeName = node->getType();
     Type* declaredType = getLLVMType(typeName);
     
@@ -1285,7 +1323,7 @@ llvm::Value* LLVMGenerator::generateVariable(VarNode* node) {
             Value* initVal = generateExpr(node->getInit().get());
             if (initVal) {
                 // Para arrays, usar tipo exato do inicializador
-                AllocaInst* alloca = builder->CreateAlloca(initVal->getType(), nullptr, node->getName());
+                AllocaInst* alloca = builder.CreateAlloca(initVal->getType(), nullptr, node->getName());
                 namedValues[node->getName()] = alloca;
                 variableTypes[node->getName()] = initVal->getType();
                 
@@ -1296,28 +1334,28 @@ llvm::Value* LLVMGenerator::generateVariable(VarNode* node) {
                     
                     for (unsigned i = 0; i < arrayType->getNumElements(); ++i) {
                         Value* indices[] = {
-                            ConstantInt::get(Type::getInt32Ty(*context), 0),
-                            ConstantInt::get(Type::getInt32Ty(*context), i)
+                            ConstantInt::get(Type::getInt32Ty(contextManager->getContext()), 0),
+                            ConstantInt::get(Type::getInt32Ty(contextManager->getContext()), i)
                         };
                         
                         // Carregar do inicializador
-                        Value* srcElemPtr = builder->CreateGEP(arrayType, initVal, indices, "srcelem");
-                        Value* elemValue = builder->CreateLoad(elemType, srcElemPtr, "loadtmp");
+                        Value* srcElemPtr = builder.CreateGEP(arrayType, initVal, indices, "srcelem");
+                        Value* elemValue = builder.CreateLoad(elemType, srcElemPtr, "loadtmp");
                         
                         // Armazenar na variável
-                        Value* dstElemPtr = builder->CreateGEP(arrayType, alloca, indices, "dstelem");
-                        builder->CreateStore(elemValue, dstElemPtr);
+                        Value* dstElemPtr = builder.CreateGEP(arrayType, alloca, indices, "dstelem");
+                        builder.CreateStore(elemValue, dstElemPtr);
                     }
                 } else {
                     // Tipos não-array: armazenar diretamente
-                    builder->CreateStore(initVal, alloca);
+                    builder.CreateStore(initVal, alloca);
                 }
                 return alloca;
             }
         }
         
         // Sem inicialização: usar tipo declarado
-        AllocaInst* alloca = builder->CreateAlloca(declaredType, nullptr, node->getName());
+        AllocaInst* alloca = builder.CreateAlloca(declaredType, nullptr, node->getName());
         namedValues[node->getName()] = alloca;
         variableTypes[node->getName()] = declaredType;
         return alloca;
@@ -1332,11 +1370,13 @@ llvm::Value* LLVMGenerator::generateVariable(VarNode* node) {
 // ============================================================================
 
 Value* LLVMGenerator::generateNumber(NumberNode* node) {
+    auto& context = contextManager->getContext();
+    
     if (node->isFloatingPoint()) {
-        return ConstantFP::get(Type::getFloatTy(*context), 
+        return ConstantFP::get(Type::getFloatTy(context), 
             APFloat(static_cast<float>(node->getFloatValue())));
     } else {
-        return ConstantInt::get(*context, APInt(32, node->getIntValue()));
+        return ConstantInt::get(context, APInt(32, node->getIntValue()));
     }
 }
 
@@ -1394,6 +1434,8 @@ Value* LLVMGenerator::generateReturn(ReturnNode* node) {
         return nullptr;
     }
     
+    auto& builder = irBuilder->getBuilder();
+    
     Type* returnType = currentFunction->getReturnType();
     
     if (node->getExpr()) {
@@ -1407,13 +1449,13 @@ Value* LLVMGenerator::generateReturn(ReturnNode* node) {
         // Converter tipo se necessário
         if (retValue->getType() != returnType) {
             if (returnType->isIntegerTy(32) && retValue->getType()->isIntegerTy(1)) {
-                retValue = builder->CreateZExt(retValue, returnType, "retconv");
+                retValue = irBuilder->createBoolToInt(retValue);
             } else if (returnType->isIntegerTy(1) && retValue->getType()->isIntegerTy(32)) {
-                retValue = builder->CreateICmpNE(retValue, ConstantInt::get(*context, APInt(32, 0)), "retconv");
+                retValue = irBuilder->createIntToBool(retValue);
             } else if (returnType->isFloatTy() && retValue->getType()->isIntegerTy(32)) {
-                retValue = builder->CreateSIToFP(retValue, returnType, "retconv");
+                retValue = irBuilder->createIntToFloat(retValue);
             } else if (returnType->isIntegerTy(32) && retValue->getType()->isFloatTy()) {
-                retValue = builder->CreateFPToSI(retValue, returnType, "retconv");
+                retValue = irBuilder->createFloatToInt(retValue);
             } else {
                 llvm::errs() << "Erro: Tipo de retorno incompatível. Esperado: " 
                             << *returnType << ", obtido: " << *retValue->getType() << "\n";
@@ -1421,7 +1463,7 @@ Value* LLVMGenerator::generateReturn(ReturnNode* node) {
             }
         }
         
-        builder->CreateRet(retValue);
+        builder.CreateRet(retValue);
         return retValue;
     } else {
         // Return void (sem valor)
@@ -1430,29 +1472,32 @@ Value* LLVMGenerator::generateReturn(ReturnNode* node) {
             return nullptr;
         }
         
-        builder->CreateRetVoid();
+        builder.CreateRetVoid();
         return nullptr;
     }
 }
 
 Value* LLVMGenerator::generateWhile(WhileNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     // Salvar estado para escopo do loop
     std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
     std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
     
-    Function* function = builder->GetInsertBlock()->getParent();
-    BasicBlock* currentBB = builder->GetInsertBlock();
+    Function* function = builder.GetInsertBlock()->getParent();
+    BasicBlock* currentBB = builder.GetInsertBlock();
     
     // Criar estrutura de blocos para o loop while
-    BasicBlock* condBB = BasicBlock::Create(*context, "while.cond", function);
-    BasicBlock* bodyBB = BasicBlock::Create(*context, "while.body", function);
-    BasicBlock* afterBB = BasicBlock::Create(*context, "while.end", function);
+    BasicBlock* condBB = BasicBlock::Create(context, "while.cond", function);
+    BasicBlock* bodyBB = BasicBlock::Create(context, "while.body", function);
+    BasicBlock* afterBB = BasicBlock::Create(context, "while.end", function);
     
     // Saltar para bloco de condição
-    builder->CreateBr(condBB);
+    builder.CreateBr(condBB);
     
     // Gerar condição
-    builder->SetInsertPoint(condBB);
+    builder.SetInsertPoint(condBB);
     Value* condValue = generateExpr(node->getCondition());
     if (!condValue) {
         llvm::errs() << "Erro: Condição do while inválida\n";
@@ -1461,16 +1506,13 @@ Value* LLVMGenerator::generateWhile(WhileNode* node) {
     
     // Converter para booleano
     if (!condValue->getType()->isIntegerTy(1)) {
-        condValue = builder->CreateICmpNE(
-            condValue, 
-            ConstantInt::get(condValue->getType(), 0), 
-            "whilecond");
+        condValue = irBuilder->createIntToBool(condValue);
     }
     
-    builder->CreateCondBr(condValue, bodyBB, afterBB);
+    builder.CreateCondBr(condValue, bodyBB, afterBB);
     
     // Gerar corpo do loop
-    builder->SetInsertPoint(bodyBB);
+    builder.SetInsertPoint(bodyBB);
     pushLoopBlocks(afterBB, condBB);
     
     if (node->getBody()) {
@@ -1478,19 +1520,22 @@ Value* LLVMGenerator::generateWhile(WhileNode* node) {
     }
     
     popLoopBlocks();
-    builder->CreateBr(condBB);
+    builder.CreateBr(condBB);
     
     // Continuar após o loop
-    builder->SetInsertPoint(afterBB);
+    builder.SetInsertPoint(afterBB);
     
     // Restaurar tabelas de símbolos
     namedValues = oldNamedValues;
     variableTypes = oldVariableTypes;
     
-    return ConstantInt::get(*context, APInt(32, 0));
+    return ConstantInt::get(context, APInt(32, 0));
 }
 
 Value* LLVMGenerator::generateIf(IfNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     Value* condValue = generateExpr(node->getCondition());
     if (!condValue) {
         llvm::errs() << "Erro: Condição do if inválida\n";
@@ -1499,36 +1544,33 @@ Value* LLVMGenerator::generateIf(IfNode* node) {
     
     // Converter condição para booleano
     if (!condValue->getType()->isIntegerTy(1)) {
-        condValue = builder->CreateICmpNE(
-            condValue, 
-            ConstantInt::get(condValue->getType(), 0), 
-            "ifcond");
+        condValue = irBuilder->createIntToBool(condValue);
     }
     
-    Function* function = builder->GetInsertBlock()->getParent();
+    Function* function = builder.GetInsertBlock()->getParent();
     
     // Criar blocos para estrutura if-else
-    BasicBlock* thenBB = BasicBlock::Create(*context, "then", function);
+    BasicBlock* thenBB = BasicBlock::Create(context, "then", function);
     BasicBlock* elseBB = node->getElseBlock() ? 
-                         BasicBlock::Create(*context, "else", function) : nullptr;
-    BasicBlock* mergeBB = BasicBlock::Create(*context, "ifcont", function);
+                         BasicBlock::Create(context, "else", function) : nullptr;
+    BasicBlock* mergeBB = BasicBlock::Create(context, "ifcont", function);
     
     // Criar branch condicional
     if (elseBB) {
-        builder->CreateCondBr(condValue, thenBB, elseBB);
+        builder.CreateCondBr(condValue, thenBB, elseBB);
     } else {
-        builder->CreateCondBr(condValue, thenBB, mergeBB);
+        builder.CreateCondBr(condValue, thenBB, mergeBB);
     }
     
     // Gerar bloco then
-    builder->SetInsertPoint(thenBB);
+    builder.SetInsertPoint(thenBB);
     Value* thenValue = generateExpr(node->getThenBlock());
-    thenBB = builder->GetInsertBlock();
+    thenBB = builder.GetInsertBlock();
     
     bool thenHasTerminator = thenBB->getTerminator() != nullptr;
     
     if (!thenHasTerminator) {
-        builder->CreateBr(mergeBB);
+        builder.CreateBr(mergeBB);
     }
     
     // Gerar bloco else se existir
@@ -1536,14 +1578,14 @@ Value* LLVMGenerator::generateIf(IfNode* node) {
     bool elseHasTerminator = false;
     
     if (elseBB) {
-        builder->SetInsertPoint(elseBB);
+        builder.SetInsertPoint(elseBB);
         elseValue = generateExpr(node->getElseBlock());
-        elseBB = builder->GetInsertBlock();
+        elseBB = builder.GetInsertBlock();
         
         elseHasTerminator = elseBB->getTerminator() != nullptr;
         
         if (!elseHasTerminator) {
-            builder->CreateBr(mergeBB);
+            builder.CreateBr(mergeBB);
         }
     }
     
@@ -1552,11 +1594,11 @@ Value* LLVMGenerator::generateIf(IfNode* node) {
                           (!elseBB || !elseHasTerminator || isa<BranchInst>(elseBB->getTerminator()));
     
     if (mergeReachable) {
-        builder->SetInsertPoint(mergeBB);
+        builder.SetInsertPoint(mergeBB);
         // Criar PHI node para valor resultante do if-else
         if (thenValue && elseValue && thenValue->getType() == elseValue->getType() && 
             !thenHasTerminator && !elseHasTerminator) {
-            PHINode* phi = builder->CreatePHI(thenValue->getType(), 2, "ifresult");
+            PHINode* phi = builder.CreatePHI(thenValue->getType(), 2, "ifresult");
             phi->addIncoming(thenValue, thenBB);
             phi->addIncoming(elseValue, elseBB);
             return phi;
@@ -1573,6 +1615,8 @@ Value* LLVMGenerator::generateIf(IfNode* node) {
 // ============================================================================
 
 Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
+    auto& builder = irBuilder->getBuilder();
+    
     Value* operand = generateExpr(node->getOperand());
     if (!operand) return nullptr;
 
@@ -1581,29 +1625,25 @@ Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
 
     if (op == "-") {
         if (type->isFloatTy()) {
-            return builder->CreateFNeg(operand, "negtmp");
+            return builder.CreateFNeg(operand, "negtmp");
         } else if (type->isIntegerTy(32)) {
-            return builder->CreateNeg(operand, "negtmp");
+            return builder.CreateNeg(operand, "negtmp");
         } else {
             llvm::errs() << "Erro: Operador '-' não suportado para este tipo\n";
             return nullptr;
         }
     } else if (op == "!") {
         if (type->isIntegerTy(1)) {
-            return builder->CreateNot(operand, "nottmp");
+            return builder.CreateNot(operand, "nottmp");
         } else if (type->isIntegerTy(32)) {
-            Value* boolVal = builder->CreateICmpNE(
-                operand, 
-                ConstantInt::get(*context, APInt(32, 0)), 
-                "booltmp");
-            return builder->CreateNot(boolVal, "nottmp");
+            return irBuilder->createNot(irBuilder->createIntToBool(operand));
         } else {
             llvm::errs() << "Erro: Operador '!' não suportado para este tipo\n";
             return nullptr;
         }
     } else if (op == "~") {
         if (type->isIntegerTy(32)) {
-            return builder->CreateNot(operand, "bwnottmp");
+            return builder.CreateNot(operand, "bwnottmp");
         } else {
             llvm::errs() << "Erro: Operador '~' não suportado para este tipo\n";
             return nullptr;
@@ -1615,36 +1655,42 @@ Value* LLVMGenerator::generateUnaryExpr(UnaryNode* node) {
 }
 
 Value* LLVMGenerator::generateBreak(BreakNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     if (breakBlocks.empty()) {
         llvm::errs() << "Aviso: 'break' fora de um loop - ignorando\n";
-        return ConstantInt::get(*context, APInt(32, 0));
+        return ConstantInt::get(context, APInt(32, 0));
     }
     
     // Saltar para bloco de break
     BasicBlock* breakBlock = breakBlocks.back();
-    builder->CreateBr(breakBlock);
+    builder.CreateBr(breakBlock);
     
     // Criar bloco vazio para evitar instruções órfãs
-    BasicBlock* afterBreak = BasicBlock::Create(*context, "afterbreak", currentFunction);
-    builder->SetInsertPoint(afterBreak);
+    BasicBlock* afterBreak = BasicBlock::Create(context, "afterbreak", currentFunction);
+    builder.SetInsertPoint(afterBreak);
     
-    return ConstantInt::get(*context, APInt(32, 0));
+    return ConstantInt::get(context, APInt(32, 0));
 }
 
 Value* LLVMGenerator::generateContinue(ContinueNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     if (continueBlocks.empty()) {
         llvm::errs() << "Aviso: 'continue' fora de um loop - ignorando\n";
-        return ConstantInt::get(*context, APInt(32, 0));
+        return ConstantInt::get(context, APInt(32, 0));
     }
     
     // Saltar para bloco de continue
     BasicBlock* continueBlock = continueBlocks.back();
-    builder->CreateBr(continueBlock);
+    builder.CreateBr(continueBlock);
     
-    BasicBlock* afterContinue = BasicBlock::Create(*context, "aftercontinue", currentFunction);
-    builder->SetInsertPoint(afterContinue);
+    BasicBlock* afterContinue = BasicBlock::Create(context, "aftercontinue", currentFunction);
+    builder.SetInsertPoint(afterContinue);
     
-    return ConstantInt::get(*context, APInt(32, 0));
+    return ConstantInt::get(context, APInt(32, 0));
 }
 
 void LLVMGenerator::pushLoopBlocks(BasicBlock* breakBlock, BasicBlock* continueBlock) {
@@ -1653,28 +1699,31 @@ void LLVMGenerator::pushLoopBlocks(BasicBlock* breakBlock, BasicBlock* continueB
 }
 
 Value* LLVMGenerator::generateFor(ForNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     // Salvar estado para escopo do loop
     std::unordered_map<std::string, llvm::Value*> oldNamedValues = namedValues;
     std::unordered_map<std::string, llvm::Type*> oldVariableTypes = variableTypes;
     
-    Function* function = builder->GetInsertBlock()->getParent();
+    Function* function = builder.GetInsertBlock()->getParent();
     
     // Criar estrutura de blocos para loop for
-    BasicBlock* preheaderBB = builder->GetInsertBlock();
-    BasicBlock* condBB = BasicBlock::Create(*context, "for.cond", function);
-    BasicBlock* bodyBB = BasicBlock::Create(*context, "for.body", function);
-    BasicBlock* updateBB = BasicBlock::Create(*context, "for.update", function);
-    BasicBlock* afterBB = BasicBlock::Create(*context, "for.end", function);
+    BasicBlock* preheaderBB = builder.GetInsertBlock();
+    BasicBlock* condBB = BasicBlock::Create(context, "for.cond", function);
+    BasicBlock* bodyBB = BasicBlock::Create(context, "for.body", function);
+    BasicBlock* updateBB = BasicBlock::Create(context, "for.update", function);
+    BasicBlock* afterBB = BasicBlock::Create(context, "for.end", function);
     
     // Inicialização
     if (node->getInit()) {
         generateExpr(node->getInit());
     }
     
-    builder->CreateBr(condBB);
+    builder.CreateBr(condBB);
     
     // Condição
-    builder->SetInsertPoint(condBB);
+    builder.SetInsertPoint(condBB);
     Value* condValue = nullptr;
     if (node->getCond()) {
         condValue = generateExpr(node->getCond());
@@ -1684,19 +1733,16 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
         }
         
         if (!condValue->getType()->isIntegerTy(1)) {
-            condValue = builder->CreateICmpNE(
-                condValue, 
-                ConstantInt::get(condValue->getType(), 0), 
-                "forcond");
+            condValue = irBuilder->createIntToBool(condValue);
         }
     } else {
-        condValue = ConstantInt::get(Type::getInt1Ty(*context), 1);
+        condValue = ConstantInt::get(Type::getInt1Ty(context), 1);
     }
     
-    builder->CreateCondBr(condValue, bodyBB, afterBB);
+    builder.CreateCondBr(condValue, bodyBB, afterBB);
     
     // Corpo
-    builder->SetInsertPoint(bodyBB);
+    builder.SetInsertPoint(bodyBB);
     pushLoopBlocks(afterBB, updateBB);
     
     if (node->getBody()) {
@@ -1704,20 +1750,20 @@ Value* LLVMGenerator::generateFor(ForNode* node) {
     }
     
     popLoopBlocks();
-    builder->CreateBr(updateBB);
+    builder.CreateBr(updateBB);
     
     // Atualização
-    builder->SetInsertPoint(updateBB);
+    builder.SetInsertPoint(updateBB);
     if (node->getUpdate()) {
         generateExpr(node->getUpdate());
     }
     
-    builder->CreateBr(condBB);
+    builder.CreateBr(condBB);
     
     // Após o loop
-    builder->SetInsertPoint(afterBB);
+    builder.SetInsertPoint(afterBB);
     
-    return ConstantInt::get(*context, APInt(32, 0));
+    return ConstantInt::get(context, APInt(32, 0));
 }
 
 void LLVMGenerator::popLoopBlocks() {
@@ -1738,6 +1784,8 @@ Value* LLVMGenerator::generateAssign(AssignNode* node) {
         return generateArrayAssignment(node);
     }
 
+    auto& builder = irBuilder->getBuilder();
+    
     // Buscar variável local ou global
     if (namedValues.count(identifier)) {
         target = namedValues[identifier];
@@ -1762,13 +1810,13 @@ Value* LLVMGenerator::generateAssign(AssignNode* node) {
     // Converter tipos se necessário
     if (value->getType() != targetType) {
         if (targetType->isIntegerTy(32) && value->getType()->isIntegerTy(1)) {
-            value = builder->CreateZExt(value, targetType, "intconv");
+            value = irBuilder->createBoolToInt(value);
         } else if (targetType->isIntegerTy(1) && value->getType()->isIntegerTy(32)) {
-            value = builder->CreateICmpNE(value, ConstantInt::get(*context, APInt(32, 0)), "boolconv");
+            value = irBuilder->createIntToBool(value);
         } else if (targetType->isFloatTy() && value->getType()->isIntegerTy(32)) {
-            value = builder->CreateSIToFP(value, targetType, "floatconv");
+            value = irBuilder->createIntToFloat(value);
         } else if (targetType->isIntegerTy(32) && value->getType()->isFloatTy()) {
-            value = builder->CreateFPToSI(value, targetType, "intconv");
+            value = irBuilder->createFloatToInt(value);
         } else {
             llvm::errs() << "Erro: Tipos incompatíveis na atribuição para '" 
                         << identifier << "'. Esperado: " << *targetType
@@ -1778,19 +1826,22 @@ Value* LLVMGenerator::generateAssign(AssignNode* node) {
     }
 
     // Armazenar valor
-    builder->CreateStore(value, target);
+    builder.CreateStore(value, target);
     return value;
 }
 
 Value* LLVMGenerator::generateBool(BoolNode* node) {
-    return ConstantInt::get(*context, APInt(1, node->getValue() ? 1 : 0));
+    auto& context = contextManager->getContext();
+    return ConstantInt::get(context, APInt(1, node->getValue() ? 1 : 0));
 }
 
 Value* LLVMGenerator::generateString(StringNode* node) {
     GlobalVariable* strArray = createStringLiteral(node->getValue());
     
+    auto& context = contextManager->getContext();
+    
     // Retornar ponteiro para primeiro caractere
-    Constant* zero = ConstantInt::get(Type::getInt32Ty(*context), 0);
+    Constant* zero = ConstantInt::get(Type::getInt32Ty(context), 0);
     Constant* indices[] = {zero, zero};
     return ConstantExpr::getGetElementPtr(
         strArray->getValueType(),
@@ -1805,6 +1856,10 @@ Value* LLVMGenerator::generateString(StringNode* node) {
 // ============================================================================
 
 Value* LLVMGenerator::generateCall(CallNode* node) {
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    auto& builder = irBuilder->getBuilder();
+    
     const std::string& funcName = node->getFunctionName();
     
     // Verificar se é função built-in
@@ -1813,7 +1868,7 @@ Value* LLVMGenerator::generateCall(CallNode* node) {
     }
     
     // Buscar função no módulo
-    Function* callee = module->getFunction(funcName);
+    Function* callee = module.getFunction(funcName);
     if (!callee) {
         llvm::errs() << "Erro: Função '" << funcName << "' não declarada\n";
         return nullptr;
@@ -1842,13 +1897,13 @@ Value* LLVMGenerator::generateCall(CallNode* node) {
         Type* expectedType = callee->getArg(idx)->getType();
         if (argValue->getType() != expectedType) {
             if (expectedType->isIntegerTy(32) && argValue->getType()->isIntegerTy(1)) {
-                argValue = builder->CreateZExt(argValue, expectedType, "argconv");
+                argValue = irBuilder->createBoolToInt(argValue);
             } else if (expectedType->isIntegerTy(1) && argValue->getType()->isIntegerTy(32)) {
-                argValue = builder->CreateICmpNE(argValue, ConstantInt::get(*context, APInt(32, 0)), "argconv");
+                argValue = irBuilder->createIntToBool(argValue);
             } else if (expectedType->isFloatTy() && argValue->getType()->isIntegerTy(32)) {
-                argValue = builder->CreateSIToFP(argValue, expectedType, "argconv");
+                argValue = irBuilder->createIntToFloat(argValue);
             } else if (expectedType->isIntegerTy(32) && argValue->getType()->isFloatTy()) {
-                argValue = builder->CreateFPToSI(argValue, expectedType, "argconv");
+                argValue = irBuilder->createFloatToInt(argValue);
             } else {
                 llvm::errs() << "Erro: Tipo de argumento " << idx << " incompatível para função '" 
                             << funcName << "'. Esperado: " << *expectedType
@@ -1863,9 +1918,9 @@ Value* LLVMGenerator::generateCall(CallNode* node) {
     
     // Criar chamada
     if (callee->getReturnType()->isVoidTy()) {
-        return builder->CreateCall(callee, args);
+        return builder.CreateCall(callee, args);
     } else {
-        return builder->CreateCall(callee, args, "calltmp");
+        return builder.CreateCall(callee, args, "calltmp");
     }
 }
 
@@ -1874,6 +1929,9 @@ Value* LLVMGenerator::generateCall(CallNode* node) {
 // ============================================================================
 
 Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
+    auto& context = contextManager->getContext();
+    auto& builder = irBuilder->getBuilder();
+    
     Value* L = generateExpr(node->getLeft());
     Value* R = generateExpr(node->getRight());
     
@@ -1882,13 +1940,13 @@ Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
     // Converter tipos para compatibilidade
     if (L->getType() != R->getType()) {
         if (L->getType()->isIntegerTy(32) && R->getType()->isIntegerTy(1)) {
-            R = builder->CreateZExt(R, Type::getInt32Ty(*context), "zexttmp");
+            R = irBuilder->createBoolToInt(R);
         } else if (L->getType()->isIntegerTy(1) && R->getType()->isIntegerTy(32)) {
-            L = builder->CreateZExt(L, Type::getInt32Ty(*context), "zexttmp");
+            L = irBuilder->createBoolToInt(L);
         } else if (L->getType()->isFloatTy() && R->getType()->isIntegerTy(32)) {
-            R = builder->CreateSIToFP(R, Type::getFloatTy(*context), "sitofptmp");
+            R = irBuilder->createIntToFloat(R);
         } else if (L->getType()->isIntegerTy(32) && R->getType()->isFloatTy()) {
-            L = builder->CreateSIToFP(L, Type::getFloatTy(*context), "sitofptmp");
+            L = irBuilder->createIntToFloat(L);
         } else {
             llvm::errs() << "Erro: Tipos incompatíveis na operação binária: " 
                         << *L->getType() << " vs " << *R->getType() << "\n";
@@ -1902,47 +1960,43 @@ Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
     // Operadores lógicos
     if (op == "&&" || op == "||") {
         if (!L->getType()->isIntegerTy(1)) {
-            L = builder->CreateICmpNE(L, ConstantInt::get(L->getType(), 0), "booltmp");
+            L = irBuilder->createIntToBool(L);
         }
         if (!R->getType()->isIntegerTy(1)) {
-            R = builder->CreateICmpNE(R, ConstantInt::get(R->getType(), 0), "booltmp");
+            R = irBuilder->createIntToBool(R);
         }
         
-        return op == "&&" ? builder->CreateAnd(L, R, "andtmp") 
-                         : builder->CreateOr(L, R, "ortmp");
+        return op == "&&" ? irBuilder->createAnd(L, R) 
+                         : irBuilder->createOr(L, R);
     }
 
     // Operadores aritméticos e de comparação
     if (op == "+") {
-        return type->isFloatTy() ? builder->CreateFAdd(L, R, "addtmp") 
-                               : builder->CreateAdd(L, R, "addtmp");
+        return irBuilder->createAdd(L, R);
     } else if (op == "-") {
-        return type->isFloatTy() ? builder->CreateFSub(L, R, "subtmp") 
-                               : builder->CreateSub(L, R, "subtmp");
+        return irBuilder->createSub(L, R);
     } else if (op == "*") {
-        return type->isFloatTy() ? builder->CreateFMul(L, R, "multmp") 
-                               : builder->CreateMul(L, R, "multmp");
+        return irBuilder->createMul(L, R);
     } else if (op == "/") {
-        return type->isFloatTy() ? builder->CreateFDiv(L, R, "divtmp") 
-                               : builder->CreateSDiv(L, R, "divtmp");
+        return irBuilder->createDiv(L, R);
     } else if (op == "<") {
-        return type->isFloatTy() ? builder->CreateFCmpULT(L, R, "cmptmp")
-                               : builder->CreateICmpSLT(L, R, "cmptmp");
+        return irBuilder->createLessThan(L, R);
     } else if (op == ">") {
-        return type->isFloatTy() ? builder->CreateFCmpUGT(L, R, "cmptmp")
-                               : builder->CreateICmpSGT(L, R, "cmptmp");
+        return irBuilder->createGreaterThan(L, R);
     } else if (op == "<=") {
-        return type->isFloatTy() ? builder->CreateFCmpULE(L, R, "cmptmp")
-                               : builder->CreateICmpSLE(L, R, "cmptmp");
+        // Implementação simplificada para <=
+        Value* less = irBuilder->createLessThan(L, R);
+        Value* equal = irBuilder->createEqual(L, R);
+        return irBuilder->createOr(less, equal);
     } else if (op == ">=") {
-        return type->isFloatTy() ? builder->CreateFCmpUGE(L, R, "cmptmp")
-                               : builder->CreateICmpSGE(L, R, "cmptmp");
+        // Implementação simplificada para >=
+        Value* greater = irBuilder->createGreaterThan(L, R);
+        Value* equal = irBuilder->createEqual(L, R);
+        return irBuilder->createOr(greater, equal);
     } else if (op == "==") {
-        return type->isFloatTy() ? builder->CreateFCmpUEQ(L, R, "cmptmp")
-                               : builder->CreateICmpEQ(L, R, "cmptmp");
+        return irBuilder->createEqual(L, R);
     } else if (op == "!=") {
-        return type->isFloatTy() ? builder->CreateFCmpUNE(L, R, "cmptmp")
-                               : builder->CreateICmpNE(L, R, "cmptmp");
+        return irBuilder->createNotEqual(L, R);
     }
 
     llvm::errs() << "Operador binário desconhecido: " << op << "\n";
@@ -1954,11 +2008,13 @@ Value* LLVMGenerator::generateBinaryExpr(BinaryNode* node) {
 // ============================================================================
 
 Value* LLVMGenerator::generateIdentifier(IdentifierNode* node) {
+    auto& builder = irBuilder->getBuilder();
+    
     // Buscar variável local
     if (namedValues.count(node->getName())) {
         Value* ptr = namedValues[node->getName()];
         if (ptr->getType()->isPointerTy()) {
-            return builder->CreateLoad(variableTypes[node->getName()], ptr, 
+            return builder.CreateLoad(variableTypes[node->getName()], ptr, 
                 node->getName() + ".load");
         }
         return ptr;
@@ -1967,7 +2023,7 @@ Value* LLVMGenerator::generateIdentifier(IdentifierNode* node) {
     // Buscar variável global
     if (globalValues.count(node->getName())) {
         GlobalVariable* gvar = globalValues[node->getName()];
-        return builder->CreateLoad(globalTypes[node->getName()], gvar, 
+        return builder.CreateLoad(globalTypes[node->getName()], gvar, 
             node->getName() + ".load");
     }
     
@@ -1980,7 +2036,11 @@ Value* LLVMGenerator::generateIdentifier(IdentifierNode* node) {
 // ============================================================================
 
 void LLVMGenerator::generateFunction(FunctionNode* node) {
-    if (module->getFunction(node->getName())) {
+    auto& context = contextManager->getContext();
+    auto& module = contextManager->getModule();
+    auto& builder = irBuilder->getBuilder();
+    
+    if (module.getFunction(node->getName())) {
         llvm::errs() << "Aviso: Função '" << node->getName() << "' já declarada\n";
         return;
     }
@@ -2020,12 +2080,12 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
         funcType,
         Function::ExternalLinkage,
         node->getName(),
-        *module
+        module
     );
     
     currentFunction = func;
-    BasicBlock* bb = BasicBlock::Create(*context, "entry", func);
-    builder->SetInsertPoint(bb);
+    BasicBlock* bb = BasicBlock::Create(context, "entry", func);
+    builder.SetInsertPoint(bb);
     
     // Configurar parâmetros
     unsigned idx = 0;
@@ -2037,13 +2097,13 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
         arg.setName(paramName);
         
         Type* paramType = getLLVMType(paramTypeStr);
-        AllocaInst* alloca = builder->CreateAlloca(
+        AllocaInst* alloca = builder.CreateAlloca(
             paramType,
             nullptr,
             paramName
         );
         
-        builder->CreateStore(&arg, alloca);
+        builder.CreateStore(&arg, alloca);
         namedValues[paramName] = alloca;
         variableTypes[paramName] = paramType;
         idx++;
@@ -2060,36 +2120,36 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
         }
         
         // Garantir retorno se necessário
-        BasicBlock* currentBB = builder->GetInsertBlock();
+        BasicBlock* currentBB = builder.GetInsertBlock();
         if (!currentBB->getTerminator()) {
             if (returnType->isVoidTy()) {
-                builder->CreateRetVoid();
+                builder.CreateRetVoid();
             } else {
                 // Retornar valor padrão baseado no tipo
                 Value* defaultRet = nullptr;
                 if (returnType->isIntegerTy(32)) {
-                    defaultRet = ConstantInt::get(*context, APInt(32, 0));
+                    defaultRet = ConstantInt::get(context, APInt(32, 0));
                 } else if (returnType->isFloatTy()) {
-                    defaultRet = ConstantFP::get(*context, APFloat(0.0f));
+                    defaultRet = ConstantFP::get(context, APFloat(0.0f));
                 } else if (returnType->isIntegerTy(1)) {
-                    defaultRet = ConstantInt::get(*context, APInt(1, 0));
+                    defaultRet = ConstantInt::get(context, APInt(1, 0));
                 } else if (returnType->isPointerTy()) {
                     defaultRet = ConstantPointerNull::get(cast<PointerType>(returnType));
                 }
                 
                 if (defaultRet) {
-                    builder->CreateRet(defaultRet);
+                    builder.CreateRet(defaultRet);
                 } else {
-                    builder->CreateUnreachable();
+                    builder.CreateUnreachable();
                 }
             }
         }
     } else {
         // Função sem corpo (declaração apenas)
         if (returnType->isVoidTy()) {
-            builder->CreateRetVoid();
+            builder.CreateRetVoid();
         } else {
-            builder->CreateUnreachable();
+            builder.CreateUnreachable();
         }
     }
     
@@ -2115,24 +2175,7 @@ void LLVMGenerator::generateFunction(FunctionNode* node) {
 // ============================================================================
 
 Type* LLVMGenerator::getLLVMType(const std::string& typeName) {
-    // Tipos básicos
-    if (typeName == "int") return Type::getInt32Ty(*context);
-    if (typeName == "float") return Type::getFloatTy(*context);
-    if (typeName == "bool") return Type::getInt1Ty(*context);
-    if (typeName == "string") return PointerType::get(Type::getInt8Ty(*context), 0);
-    if (typeName == "void") return Type::getVoidTy(*context);
-
-    // Arrays (sintaxe: tipo[])
-    if (typeName.find("[]") != std::string::npos) {
-        std::string elemType = typeName.substr(0, typeName.find("[]"));
-        Type* elementType = getLLVMType(elemType);
-        if (elementType) {
-            // Retornar ponteiro para o tipo do elemento
-            return PointerType::get(elementType, 0);
-        }
-    }
-    
-    return nullptr;
+    return typeSystem->getLLVMType(typeName);
 }
 
 // ============================================================================
@@ -2140,7 +2183,7 @@ Type* LLVMGenerator::getLLVMType(const std::string& typeName) {
 // ============================================================================
 
 void LLVMGenerator::dumpIR() const {
-    module->print(llvm::errs(), nullptr);
+    contextManager->getModule().print(llvm::errs(), nullptr);
 }
 
 void LLVMGenerator::dumpIRToFile(const std::string& filename) const {
@@ -2150,7 +2193,6 @@ void LLVMGenerator::dumpIRToFile(const std::string& filename) const {
         llvm::errs() << "Erro ao abrir arquivo: " << EC.message() << "\n";
         return;
     }
-    module->print(out, nullptr);
+    contextManager->getModule().print(out, nullptr);
     out.close();
 }
-

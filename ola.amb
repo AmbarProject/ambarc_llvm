@@ -1,4 +1,0 @@
-func main() -> int {
-  print("Banana");
-  return 0;
-}
