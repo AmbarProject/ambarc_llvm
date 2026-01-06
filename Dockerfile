@@ -33,19 +33,19 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test -y && \
 # Instala LLVM 18.1.3 via llvm.sh
 RUN wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
-    ./llvm.sh 17 && \
+    ./llvm.sh 18 && \
     rm llvm.sh
 
 # Define variáveis de ambiente para LLVM 18
-ENV LLVM_DIR=/usr/lib/llvm-17
+ENV LLVM_DIR=/usr/lib/llvm-18
 ENV PATH=$LLVM_DIR/bin:$PATH
 ENV LD_LIBRARY_PATH=$LLVM_DIR/lib:$LD_LIBRARY_PATH
 
 # Diretório de trabalho
 WORKDIR /workspace
 
-COPY compile.sh /workspace/compile.sh
-RUN chmod +x /workspace/compile.sh
+COPY ./compiler/compile.sh /workspace/compiler/compile.sh
+RUN chmod +x /workspace/compiler/compile.sh
 
 CMD ["bash"]
 

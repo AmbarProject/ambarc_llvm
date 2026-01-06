@@ -102,20 +102,45 @@ Version: $VERSION
 Section: devel
 Priority: optional
 Architecture: $ARCH
-Depends: llvm-14, clang-14, build-essential, bison, flex
-Recommends: cmake, git
+Depends: 
+  llvm-18 (>= 18.1.3),
+  clang-18 (>= 18.1.3),
+  build-essential,
+  bison,
+  flex,
+  libstdc++6,
+  libtinfo5,
+  zlib1g,
+  libffi7,
+  libedit2,
+  libxml2,
+  libncurses5,
+  libz3-4
+Recommends: 
+  gdb,
+  valgrind,
+  cmake,
+  ninja-build,
+  ccache,
+  python3,
+  git
+Suggests:
+  ambarc-examples,
+  ambarc-doc
 Maintainer: AmbarC Team <ambarc@example.com>
 Description: AmbarC Programming Language Compiler
  AmbarC é uma linguagem de programação moderna e tipada estaticamente
- que compila para LLVM IR. Este pacote contém o compilador completo
+ que compila para LLVM IR 18. Este pacote contém o compilador completo
  e todas as ferramentas necessárias para desenvolvimento.
  .
  Características:
+  * Suporte completo a LLVM 18.1.3
   * Sintaxe limpa e moderna
   * Tipagem estática forte
   * Compilação para LLVM IR
   * Sistema de tipos avançado
   * Otimizações automáticas
+  * Integração com ferramentas de debugging
 Homepage: https://github.com/ambarc/compiler
 Vcs-Browser: https://github.com/ambarc/compiler
 Vcs-Git: https://github.com/ambarc/compiler.git
