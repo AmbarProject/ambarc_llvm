@@ -1,0 +1,5 @@
+// Exemplo Hello World em AmbarC
+func main() -> int {
+    print("Olá, Mundo do AmbarC!");
+    return 0;
+}

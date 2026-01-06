@@ -1,0 +1,57 @@
+AMBARC - COMPILER v1.0.0
+========================
+
+AmbarC é uma linguagem de programação moderna que compila para executáveis nativos.
+
+📦 INSTALAÇÃO
+-------------
+O pacote já está instalado. Para usar:
+
+1. Reinicie o terminal OU execute:
+   source /etc/profile.d/ambarc.sh
+
+2. Teste:
+   ambarc --version
+
+🚀 USO BÁSICO
+-------------
+# Compilar para executável
+ambarc programa.amb              # Gera 'programa'
+
+# Com otimizações
+ambarc -O2 programa.amb
+
+# Nome personalizado
+ambarc -o meuapp programa.amb
+
+# Ver código intermediário
+ambarc --show-ir programa.amb
+
+🔧 USO AVANÇADO
+---------------
+# Apenas gerar IR
+/usr/local/lib/ambarc/build.sh --only-ir programa.amb
+
+# Apenas gerar objeto
+/usr/local/lib/ambarc/build.sh --only-obj programa.amb
+
+# Build com opções personalizadas
+/usr/local/lib/ambarc/build.sh --llc-opts "-O3 -march=native" programa.amb
+
+📝 EXEMPLOS
+-----------
+Veja exemplos em: /usr/local/share/ambarc/examples/
+
+💡 DICAS
+--------
+• Use 'ambarc --help' para todas as opções
+• O comando gera executáveis prontos para uso
+• Arquivos temporários (.ll, .o) são removidos automaticamente
+• Use --keep-ir ou --keep-obj para manter arquivos intermediários
+
+🐛 PROBLEMAS
+------------
+Se encontrar problemas:
+1. Verifique se tem gcc instalado: gcc --version
+2. Verifique LLVM: llc --version
+3. Reporte em: https://github.com/ambarc/compiler/issues

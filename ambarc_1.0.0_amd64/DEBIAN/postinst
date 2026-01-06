@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+echo "🎉 AmbarC v1.0.0 instalado com sucesso!"
+echo ""
+echo "✨ Funcionalidades:"
+echo "  • ambarc          - Compila arquivos .amb para executáveis"
+echo "  • ambarc-compile  - Alias para compatibilidade"
+echo ""
+echo "📚 Exemplos de uso:"
+echo "  ambarc programa.amb              # Gera 'programa'"
+echo "  ambarc -O2 -o saida arquivo.amb  # Otimizado, nome personalizado"
+echo "  ambarc --help                    # Ajuda completa"
+echo ""
+echo "💡 Dica: Reinicie o terminal ou execute:"
+echo "        source /etc/profile.d/ambarc.sh"

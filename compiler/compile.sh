@@ -10,7 +10,7 @@ KEEP_OBJ=false
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 ROOT_DIR="$SCRIPT_DIR/.."
 BIN_DIR="$SCRIPT_DIR/bin"
-COMPILER_EXE="$BIN_DIR/ambar"
+COMPILER_EXE="$BIN_DIR/ambarc"
 
 # Função para mostrar ajuda
 show_help() {

@@ -1,7 +1,6 @@
-.PHONY: all build clean install uninstall deb test help
+.PHONY: all build clean install uninstall test help quick fix-deb
 
 VERSION=1.0.0
-ARCH=$(shell dpkg --print-architecture)
 
 help:
 	@echo "AmbarC - Sistema de Build"
@@ -9,14 +8,14 @@ help:
 	@echo "Comandos disponíveis:"
 	@echo "  make build      - Compilar o compilador"
 	@echo "  make clean      - Limpar arquivos temporários"
-	@echo "  make deb        - Criar pacote .deb"
-	@echo "  make install    - Instalar localmente"
-	@echo "  make uninstall  - Remover instalação"
+	@echo "  make install    - Instalar localmente (sudo)"
+	@echo "  make uninstall  - Remover instalação (sudo)"
 	@echo "  make test       - Testar instalação"
-	@echo "  make all        - Build completo + pacote"
+	@echo "  make quick      - Instalação rápida"
+	@echo "  make fix-deb    - Corrigir pacote .deb"
 	@echo ""
 
-all: build deb
+all: build
 
 build:
 	@echo "🔨 Compilando AmbarC..."
@@ -27,21 +26,20 @@ clean:
 	@echo "🧹 Limpando..."
 	@cd compiler && ./rm.sh
 	@rm -f ambarc_*.deb
+	@rm -rf ambarc_*_amd64
 	@echo "✅ Limpeza concluída!"
 
-deb: build
-	@echo "📦 Criando pacote .deb..."
-	@./tools/create-deb.sh
-
-install: deb
-	@echo "📥 Instalando..."
-	@sudo ./tools/installer.sh
+install:
+	@echo "📥 Instalando AmbarC..."
+	@sudo ./tools/simple-install.sh
 
 uninstall:
 	@echo "🗑️  Desinstalando AmbarC..."
-	@sudo dpkg -r ambarc || true
+	@sudo rm -f /usr/local/bin/ambarc
+	@sudo rm -f /usr/local/bin/ambarc-compile
 	@sudo rm -f /etc/profile.d/ambarc.sh
 	@echo "✅ AmbarC removido!"
+	@echo "   Reinicie o terminal para atualizar o PATH."
 
 test:
 	@echo "🧪 Testando AmbarC..."
@@ -50,17 +48,12 @@ test:
 		ambarc --version; \
 	else \
 		echo "❌ ambarc não encontrado"; \
+		echo "   Execute: make install"; \
 		exit 1; \
 	fi
 
-# Comando rápido para usuários
-quick:
-	@echo "⚡ Instalação rápida do AmbarC..."
-	@sudo apt-get update
-	@sudo apt-get install -y build-essential llvm-14 clang-14 bison flex
-	@make build
-	@sudo cp compiler/bin/ambarc /usr/local/bin/
-	@sudo cp compiler/compile.sh /usr/local/bin/ambarc-compile
-	@echo 'export PATH="/usr/local/bin:$$PATH"' | sudo tee /etc/profile.d/ambarc.sh
-	@echo "✅ Instalação rápida concluída!"
-	@echo "   Reinicie o terminal e execute: ambarc --version"
+quick: build install
+
+fix-deb:
+	@echo "🔧 Corrigindo pacote .deb..."
+	@./tools/fix-deb.sh

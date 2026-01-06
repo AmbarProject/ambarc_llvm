@@ -1,0 +1,5 @@
+#!/bin/bash
+echo "📢 Nota: 'ambarc-compile' está obsoleto. Use 'ambarc' diretamente."
+echo "       Exemplo: ambarc $@"
+echo ""
+/usr/local/bin/ambarc "$@"

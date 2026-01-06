@@ -108,7 +108,7 @@ echo "✅ Compilação dos objetos concluída!"
 
 # Linkar todos os objetos
 echo "🔗 Linkando executável..."
-EXECUTABLE_PATH="$BIN_DIR/ambar"
+EXECUTABLE_PATH="$BIN_DIR/ambarc"
 
 g++ -std=c++17 -Wall -Wextra -g \
   "${OBJECT_FILES[@]}" \
@@ -121,16 +121,16 @@ if [ $? -eq 0 ]; then
   chmod +x "$EXECUTABLE_PATH"
   
   # Criar link simbólico no diretório raiz se desejado
-  if [ ! -f "../ambar" ]; then
-    ln -sf "$EXECUTABLE_PATH" "$ROOT_DIR/ambar"
-    echo "🔗 Link simbólico criado: $ROOT_DIR/ambar -> $EXECUTABLE_PATH"
+  if [ ! -f "../ambarc" ]; then
+    ln -sf "$EXECUTABLE_PATH" "$ROOT_DIR/ambarc"
+    echo "🔗 Link simbólico criado: $ROOT_DIR/ambarc -> $EXECUTABLE_PATH"
   fi
   
   echo ""
   echo "🎉 Compilação bem-sucedida!"
   echo "   Compilador disponível em:"
   echo "   - $EXECUTABLE_PATH"
-  echo "   - $ROOT_DIR/ambar (link simbólico)"
+  echo "   - $ROOT_DIR/ambarc (link simbólico)"
 else
   echo "❌ Erro no linking"
   exit 1

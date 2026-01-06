@@ -1,0 +1,163 @@
+#!/bin/bash
+# Wrapper do AmbarC que gera executável completo
+
+# Configurações padrão
+OPT_LEVEL="0"
+SHOW_IR=false
+KEEP_IR=false
+KEEP_OBJ=false
+OUTPUT_FILE=""
+INPUT_FILE=""
+OTHER_ARGS=()
+
+# Parse argumentos
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -O0|-O1|-O2|-O3|-Os)
+            OPT_LEVEL="${1#-O}"
+            shift
+            ;;
+        --show-ir)
+            SHOW_IR=true
+            shift
+            ;;
+        --keep-ir)
+            KEEP_IR=true
+            shift
+            ;;
+        --keep-obj)
+            KEEP_OBJ=true
+            shift
+            ;;
+        -o)
+            if [[ -n "$2" ]]; then
+                OUTPUT_FILE="$2"
+                shift 2
+            else
+                echo "❌ Erro: Opção -o requer um argumento"
+                exit 1
+            fi
+            ;;
+        --help|-h)
+            echo "Uso: ambarc [OPÇÕES] <arquivo.amb>"
+            echo ""
+            echo "Opções:"
+            echo "  -O0, -O1, -O2, -O3, -Os  Nível de otimização"
+            echo "  -o <arquivo>             Nome do executável de saída"
+            echo "  --show-ir                Mostrar código IR gerado"
+            echo "  --keep-ir                Manter arquivo .ll"
+            echo "  --keep-obj               Manter arquivo .o"
+            echo "  --help, -h               Mostrar ajuda"
+            echo ""
+            echo "Exemplos:"
+            echo "  ambarc programa.amb      # Gera 'programa'"
+            echo "  ambarc -O2 -o prog programa.amb"
+            echo "  ambarc -O3 --show-ir programa.amb"
+            exit 0
+            ;;
+        --version|-v)
+            echo "AmbarC Compiler v1.0.0"
+            exit 0
+            ;;
+        -*)
+            # Passar outros argumentos para o compilador real
+            OTHER_ARGS+=("$1")
+            shift
+            ;;
+        *)
+            if [[ -z "$INPUT_FILE" ]]; then
+                INPUT_FILE="$1"
+            else
+                echo "⚠️  Aviso: Ignorando argumento extra '$1'"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Verificar arquivo de entrada
+if [[ -z "$INPUT_FILE" ]]; then
+    echo "❌ Erro: Nenhum arquivo .amb especificado"
+    echo "   Use: ambarc [opções] <arquivo.amb>"
+    exit 1
+fi
+
+if [[ ! -f "$INPUT_FILE" ]]; then
+    echo "❌ Erro: Arquivo '$INPUT_FILE' não encontrado"
+    exit 1
+fi
+
+if [[ "$INPUT_FILE" != *.amb ]]; then
+    echo "⚠️  Aviso: O arquivo '$INPUT_FILE' não tem extensão .amb"
+fi
+
+# Extrair nome base
+BASENAME=$(basename "$INPUT_FILE" .amb)
+SRC_DIR=$(dirname "$(realpath "$INPUT_FILE")")
+
+# Definir arquivos temporários
+LL_FILE="$SRC_DIR/$BASENAME.ll"
+OBJ_FILE="$SRC_DIR/$BASENAME.o"
+EXEC_FILE=""
+
+if [[ -n "$OUTPUT_FILE" ]]; then
+    EXEC_FILE="$OUTPUT_FILE"
+else
+    EXEC_FILE="$SRC_DIR/$BASENAME"
+fi
+
+echo "🔍 Compilando: $INPUT_FILE"
+
+# 1. Gerar código LLVM IR
+echo "🏗️  Gerando código LLVM IR..."
+if ! /usr/local/lib/ambarc/bin/ambarc-real "-O$OPT_LEVEL" "${OTHER_ARGS[@]}" "$INPUT_FILE"; then
+    echo "❌ Erro: Falha ao gerar código LLVM"
+    exit 1
+fi
+
+# Verificar se o arquivo .ll foi gerado
+if [[ ! -f "$LL_FILE" ]]; then
+    echo "❌ Erro: Arquivo LLVM IR não foi gerado: $LL_FILE"
+    exit 1
+fi
+
+# Mostrar IR se solicitado
+if [[ "$SHOW_IR" = true ]]; then
+    echo ""
+    echo "📄 CÓDIGO IR GERADO:"
+    echo "=========================================="
+    cat "$LL_FILE"
+    echo "=========================================="
+    echo ""
+fi
+
+# 2. Compilar IR para objeto
+echo "🔨 Compilando IR para objeto..."
+if ! llc "-O$OPT_LEVEL" -mtriple=x86_64-unknown-linux-gnu -filetype=obj "$LL_FILE" -o "$OBJ_FILE"; then
+    echo "❌ Erro: Falha ao compilar objeto"
+    exit 1
+fi
+
+# 3. Linkar para executável
+echo "🔗 Linkando executável..."
+if ! gcc -no-pie "$OBJ_FILE" -o "$EXEC_FILE"; then
+    echo "❌ Erro: Falha no linking"
+    exit 1
+fi
+
+chmod +x "$EXEC_FILE"
+
+echo "✅ Executável criado: $EXEC_FILE"
+
+# 4. Limpeza
+if [[ "$KEEP_IR" = false ]]; then
+    rm -f "$LL_FILE"
+    echo "🗑️  Removido arquivo IR: $LL_FILE"
+fi
+
+if [[ "$KEEP_OBJ" = false ]]; then
+    rm -f "$OBJ_FILE"
+    echo "🗑️  Removido arquivo objeto: $OBJ_FILE"
+fi
+
+echo "🎉 Compilação concluída com sucesso!"
