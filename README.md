@@ -8,14 +8,6 @@ AmbarC é uma linguagem de programação moderna e tipada estaticamente que comp
 
 ## 🚀 Instalação Rápida
 
-### Ubuntu/Debian (Recomendado)
-```bash
-# Instalar com um comando
-curl -fsSL https://raw.githubusercontent.com/AmbarProject/ambarc_llvm/main/install.sh | bash
-```
-
-### Ou manualmente:
-
 ```bash
 # 1. Baixar o instalador
 wget https://raw.githubusercontent.com/AmbarProject/ambarc_llvm/main/install.sh
@@ -23,17 +15,6 @@ chmod +x install.sh
 
 # 2. Executar
 sudo ./install.sh
-```
-
-### Pacote .deb
-
-```bash
-# Baixar o pacote mais recente
-wget https://github.com/AmbarProject/ambarc_llvm/releases/latest/download/ambarc_1.0.0_amd64.deb
-
-# Instalar
-sudo dpkg -i ambarc_1.0.0_amd64.deb
-sudo apt-get install -f
 ```
 
 ## 📦 O Que Está Incluído
